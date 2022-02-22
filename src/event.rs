@@ -196,7 +196,7 @@ where
         x: f64,
         y: f64,
     ) -> Result<(), E> {
-        crate::input::mouse::handle_move(ctx, x as f32, y as f32);
+        ctx.mouse_context.handle_move(x as f32, y as f32);
 
         match phase {
             TouchPhase::Started => {
@@ -204,7 +204,7 @@ where
                 self.mouse_button_down_event(ctx, MouseButton::Left, x as f32, y as f32)?;
             }
             TouchPhase::Moved => {
-                let diff = crate::input::mouse::last_delta(ctx);
+                let diff = ctx.mouse_context.last_delta();
                 self.mouse_motion_event(ctx, x as f32, y as f32, diff.x, diff.y)?;
             }
             TouchPhase::Ended | TouchPhase::Cancelled => {
@@ -296,8 +296,6 @@ where
     S: EventHandler<E>,
     E: std::error::Error,
 {
-    use crate::input::mouse;
-
     event_loop.run(move |mut event, _, control_flow| {
         if !ctx.continuing {
             *control_flow = ControlFlow::Exit;
@@ -399,7 +397,7 @@ where
                     button,
                     ..
                 } => {
-                    let position = mouse::position(ctx);
+                    let position = ctx.mouse_context.position();
                     match element_state {
                         ElementState::Pressed => {
                             let res =
@@ -430,8 +428,8 @@ where
                     }
                 }
                 WindowEvent::CursorMoved { .. } => {
-                    let position = mouse::position(ctx);
-                    let delta = mouse::last_delta(ctx);
+                    let position = ctx.mouse_context.position();
+                    let delta = ctx.mouse_context.last_delta();
                     let res =
                         state.mouse_motion_event(ctx, position.x, position.y, delta.x, delta.y);
                     if catch_error(ctx, res, state, control_flow, ErrorOrigin::MouseMotionEvent) {
@@ -572,11 +570,8 @@ pub fn process_event(ctx: &mut Context, event: &mut winit::event::Event<()>) {
                 position: physical_position,
                 ..
             } => {
-                crate::input::mouse::handle_move(
-                    ctx,
-                    physical_position.x as f32,
-                    physical_position.y as f32,
-                );
+                ctx.mouse_context
+                    .handle_move(physical_position.x as f32, physical_position.y as f32);
             }
             winit_event::WindowEvent::MouseInput { button, state, .. } => {
                 let pressed = match state {
