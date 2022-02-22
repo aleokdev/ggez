@@ -42,17 +42,20 @@ pub struct Context {
     /// Timer state
     pub timer_context: timer::TimeContext,
     /// Audio context
+    // TODO: Convert to static; Use Option
     pub audio_context: Box<dyn audio::AudioContext>,
     /// Keyboard context
     pub keyboard_context: keyboard::KeyboardContext,
     /// Mouse context
     pub mouse_context: mouse::MouseContext,
     /// Gamepad context
+    // TODO: Convert to static; Use Option
     pub gamepad_context: Box<dyn gamepad::GamepadContext>,
 
     /// The Conf object the Context was created with.
     /// It's here just so that we can see the original settings,
     /// updating it will have no effect.
+    // TODO: Use a readonly property then
     pub(crate) conf: conf::Conf,
     /// Controls whether or not the event loop should be running.
     /// Set this with `ggez::event::quit()`.
