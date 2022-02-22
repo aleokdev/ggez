@@ -24,14 +24,17 @@ impl MainState {
 
 impl event::EventHandler<ggez::GameError> for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
-        if input::keyboard::is_key_pressed(ctx, KeyCode::A) {
+        if ctx.keyboard_context.is_key_pressed(KeyCode::A) {
             println!("The A key is pressed");
-            if input::keyboard::is_mod_active(ctx, input::keyboard::KeyMods::SHIFT) {
+            if ctx
+                .keyboard_context
+                .is_mod_active(input::keyboard::KeyMods::SHIFT)
+            {
                 println!("The shift key is held too.");
             }
             println!(
                 "Full list of pressed keys: {:?}",
-                input::keyboard::pressed_keys(ctx)
+                ctx.keyboard_context.pressed_keys()
             );
         }
         Ok(())

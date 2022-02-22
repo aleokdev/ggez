@@ -296,7 +296,7 @@ where
     S: EventHandler<E>,
     E: std::error::Error,
 {
-    use crate::input::{keyboard, mouse};
+    use crate::input::mouse;
 
     event_loop.run(move |mut event, _, control_flow| {
         if !ctx.continuing {
@@ -355,7 +355,7 @@ where
                         },
                     ..
                 } => {
-                    let repeat = keyboard::is_key_repeated(ctx);
+                    let repeat = ctx.keyboard_context.is_key_repeated();
                     let res = state.key_down_event(
                         ctx,
                         keycode,
