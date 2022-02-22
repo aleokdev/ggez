@@ -12,7 +12,6 @@ pub use gilrs::{self, Event, Gamepad, Gilrs};
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct GamepadId(pub(crate) gilrs::GamepadId);
 
-use crate::context::Context;
 use crate::error::GameResult;
 
 /// Trait object defining a gamepad/joystick context.
@@ -105,16 +104,6 @@ impl GamepadContext for NullGamepadContext {
     fn gamepads(&self) -> GamepadsIterator {
         panic!("Gamepad module disabled")
     }
-}
-
-/// Returns the `Gamepad` associated with an `id`.
-pub fn gamepad(ctx: &Context, id: GamepadId) -> Gamepad {
-    ctx.gamepad_context.gamepad(id)
-}
-
-/// Return an iterator of all the `Gamepads` that are connected.
-pub fn gamepads(ctx: &Context) -> GamepadsIterator {
-    ctx.gamepad_context.gamepads()
 }
 
 // Properties gamepads might want:
