@@ -36,8 +36,10 @@ pub enum GameError {
     VideoError(String),
     /// Something went wrong with the `gilrs` gamepad-input library.
     GamepadError(gilrs::Error),
-    /// Something went wrong with the `lyon` shape-tesselation library.
-    LyonError(String),
+    /// Something went wrong while tessellating a shape.
+    TessellationError(lyon::lyon_tessellation::TessellationError),
+    /// Something went wrong while building geometry.
+    GeometryBuilderError(lyon::lyon_tessellation::GeometryBuilderError),
     /// Something went wrong when spawning a task with `futures`.
     SpawnError(futures::task::SpawnError),
     /// Something went wrong when drawing text.
@@ -80,6 +82,16 @@ impl fmt::Display for GameError {
             GameError::GlyphBrushError(e) => write!(f, "Text rendering error: {}", e),
             GameError::FontSelectError { font } => write!(f, "No such font '{}'", font),
             GameError::BufferAsyncError(e) => write!(f, "Async buffer map error: {}", e),
+            GameError::GeometryBuilderError(e) => write!(
+                f,
+                "Error while building geometry (did you give it too many vertices?): {:?}",
+                e
+            ),
+            GameError::TessellationError(e) => write!(
+                f,
+                "Error while tesselating shape (did you give it an infinity or NaN?): {:?}",
+                e
+            ),
             _ => write!(f, "GameError {:?}", self),
         }
     }
@@ -168,21 +180,13 @@ impl From<gilrs::Error> for GameError {
 
 impl From<lyon::lyon_tessellation::TessellationError> for GameError {
     fn from(s: lyon::lyon_tessellation::TessellationError) -> GameError {
-        let errstr = format!(
-            "Error while tesselating shape (did you give it an infinity or NaN?): {:?}",
-            s
-        );
-        GameError::LyonError(errstr)
+        GameError::TessellationError(s)
     }
 }
 
 impl From<lyon::lyon_tessellation::geometry_builder::GeometryBuilderError> for GameError {
     fn from(s: lyon::lyon_tessellation::geometry_builder::GeometryBuilderError) -> GameError {
-        let errstr = format!(
-            "Error while building geometry (did you give it too many vertices?): {:?}",
-            s
-        );
-        GameError::LyonError(errstr)
+        GameError::GeometryBuilderError(s)
     }
 }
 

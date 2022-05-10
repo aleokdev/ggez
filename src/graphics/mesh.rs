@@ -436,6 +436,9 @@ impl MeshBuilder {
     }
 
     /// Create a new mesh for a series of connected lines.
+    ///
+    /// ## Panics
+    /// Panics if the list of points given has less than two elements.
     pub fn polyline<P>(
         &mut self,
         mode: DrawMode,
@@ -446,9 +449,7 @@ impl MeshBuilder {
         P: Into<mint::Point2<f32>> + Clone,
     {
         if points.len() < 2 {
-            return Err(GameError::LyonError(
-                "MeshBuilder::polyline() got a list of < 2 points".to_string(),
-            ));
+            panic!("MeshBuilder::polyline() got a list of < 2 points");
         }
 
         self.polyline_inner(mode, points, false, color)
@@ -457,6 +458,9 @@ impl MeshBuilder {
     /// Create a new mesh for a closed polygon.
     /// The points given must be in clockwise order,
     /// otherwise at best the polygon will not draw.
+    ///
+    /// ## Panics
+    /// Panics if the list of points given has less than three elements.
     pub fn polygon<P>(
         &mut self,
         mode: DrawMode,
@@ -467,9 +471,7 @@ impl MeshBuilder {
         P: Into<mint::Point2<f32>> + Clone,
     {
         if points.len() < 3 {
-            return Err(GameError::LyonError(
-                "MeshBuilder::polygon() got a list of < 3 points".to_string(),
-            ));
+            panic!("MeshBuilder::polygon() got a list of < 3 points");
         }
 
         self.polyline_inner(mode, points, true, color)
@@ -603,15 +605,18 @@ impl MeshBuilder {
     /// The length of the list must be a multiple of 3.
     ///
     /// Currently does not support UV's or indices.
+    ///
+    /// ## Panics
+    /// Panics if the list's length is not a multiple of 3.
     pub fn triangles<P>(&mut self, triangles: &[P], color: Color) -> GameResult<&mut Self>
     where
         P: Into<mint::Point2<f32>> + Clone,
     {
         {
             if (triangles.len() % 3) != 0 {
-                return Err(GameError::LyonError(String::from(
+                panic!(
                     "Called Mesh::triangles() with points that have a length not a multiple of 3.",
-                )));
+                );
             }
             let tris = triangles
                 .iter()
