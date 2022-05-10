@@ -22,7 +22,9 @@ pub enum GameError {
     /// Something went wrong when requesting a logical device from the graphics API.
     RequestDeviceError(wgpu::RequestDeviceError),
     /// Something went wrong in the audio playback
-    AudioError(String),
+    AudioPlayError(rodio::PlayError),
+    /// Something went wrong while decoding audio data
+    AudioDecodeError(rodio::decoder::DecoderError),
     /// Something went wrong trying to set or get window properties.
     WindowError(String),
     /// Something went wrong trying to create a window
@@ -146,16 +148,14 @@ impl From<zip::result::ZipError> for GameError {
 #[cfg(feature = "audio")]
 impl From<rodio::decoder::DecoderError> for GameError {
     fn from(e: rodio::decoder::DecoderError) -> GameError {
-        let errstr = format!("Audio decoder error: {:?}", e);
-        GameError::AudioError(errstr)
+        GameError::AudioDecodeError(e)
     }
 }
 
 #[cfg(feature = "audio")]
 impl From<rodio::PlayError> for GameError {
     fn from(e: rodio::PlayError) -> GameError {
-        let errstr = format!("Audio playing error: {:?}", e);
-        GameError::AudioError(errstr)
+        GameError::AudioPlayError(e)
     }
 }
 
