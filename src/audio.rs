@@ -15,7 +15,6 @@ use std::time;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use crate::error::GameError;
 use crate::error::GameResult;
 use crate::filesystem::Filesystem;
 
@@ -31,11 +30,7 @@ pub struct AudioContext {
 impl AudioContext {
     /// Create new `AudioContext`.
     pub fn new() -> GameResult<Self> {
-        let (stream, stream_handle) = rodio::OutputStream::try_default().map_err(|_e| {
-            GameError::AudioError(String::from(
-                "Could not initialize sound system using default output device (for some reason)",
-            ))
-        })?;
+        let (stream, stream_handle) = rodio::OutputStream::try_default()?;
         Ok(Self {
             _stream: stream,
             stream_handle,
@@ -87,9 +82,9 @@ impl SoundData {
     }
 
     /// Indicates if the data can be played as a sound.
-    pub fn can_play(&self) -> bool {
+    pub fn try_decode(&self) -> Result<(), rodio::decoder::DecoderError> {
         let cursor = io::Cursor::new(self.clone());
-        rodio::Decoder::new(cursor).is_ok()
+        rodio::Decoder::new(cursor).map(|_| ())
     }
 }
 
@@ -292,11 +287,7 @@ impl Source {
 
     /// Creates a new `Source` using the given `SoundData` object.
     pub fn from_data(audio: &AudioContext, data: SoundData) -> GameResult<Self> {
-        if !data.can_play() {
-            return Err(GameError::AudioError(
-                "Could not decode the given audio data".to_string(),
-            ));
-        }
+        data.try_decode()?;
         let sink = rodio::Sink::try_new(audio.device())?;
         let cursor = io::Cursor::new(data);
         Ok(Source {
@@ -459,11 +450,8 @@ impl SpatialSource {
 
     /// Creates a new `SpatialSource` using the given `SoundData` object.
     pub fn from_data(audio: &AudioContext, data: SoundData) -> GameResult<Self> {
-        if !data.can_play() {
-            return Err(GameError::AudioError(
-                "Could not decode the given audio data".to_string(),
-            ));
-        }
+        data.try_decode()?;
+
         let sink = rodio::SpatialSink::try_new(
             audio.device(),
             [0.0, 0.0, 0.0],
