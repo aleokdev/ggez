@@ -6,63 +6,70 @@ use std::sync::Arc;
 /// An enum containing all kinds of game framework errors.
 #[derive(Debug)]
 pub enum GameError {
-    /// An error in the filesystem layout
-    FilesystemError(String),
     /// An error in the config file
     ConfigError(String),
+
+    /// An error in the filesystem layout
+    FilesystemError(String),
+
+    /// Something went wrong trying to read from a file
+    #[allow(clippy::upper_case_acronyms)]
+    IOError(Arc<std::io::Error>),
+
     /// Happens when an `winit::event_loop::EventLoopProxy` attempts to
     /// wake up an `winit::event_loop::EventLoop` that no longer exists.
     EventLoopError(String),
+
     /// An error trying to load a resource, such as getting an invalid image file.
     ResourceLoadError(String),
+    /// Attempted to draw text with a non-existent font name.
+    FontSelectError {
+        /// The non-existent font that ggez tried to obtain.
+        font: String,
+    },
     /// Unable to find a resource; the `Vec` is the paths it searched for and associated errors
     ResourceNotFound(String, Vec<(std::path::PathBuf, GameError)>),
-    /// Something went wrong in the renderer
-    RenderError(String),
+
     /// Something went wrong when requesting a logical device from the graphics API.
     RequestDeviceError(wgpu::RequestDeviceError),
+
     /// Something went wrong while streaming audio
     AudioStreamError(rodio::StreamError),
     /// Something went wrong in the audio playback
     AudioPlayError(rodio::PlayError),
     /// Something went wrong while decoding audio data
     AudioDecodeError(rodio::decoder::DecoderError),
+
     /// Something went wrong trying to set or get window properties.
     WindowError(String),
     /// Something went wrong trying to create a window
     WindowCreationError(Arc<winit::error::OsError>),
-    /// Something went wrong trying to read from a file
-    #[allow(clippy::upper_case_acronyms)]
-    IOError(Arc<std::io::Error>),
+
     /// Something went wrong trying to load a font
     FontError(glyph_brush::ab_glyph::InvalidFont),
+
     /// Something went wrong applying video settings.
     VideoError(String),
+
     /// Something went wrong with the `gilrs` gamepad-input library.
     GamepadError(gilrs::Error),
+
+    /// Something went wrong in the renderer
+    RenderError(String),
+    /// Something went wrong when asynchronously mapping a GPU buffer.
+    BufferAsyncError(wgpu::BufferAsyncError),
     /// Something went wrong while tessellating a shape.
     TessellationError(lyon::lyon_tessellation::TessellationError),
     /// Something went wrong while building geometry.
     GeometryBuilderError(lyon::lyon_tessellation::GeometryBuilderError),
-    /// Something went wrong when spawning a task with `futures`.
-    SpawnError(futures::task::SpawnError),
     /// Something went wrong when drawing text.
     GlyphBrushError(glyph_brush::BrushError),
-    /// Attempted to draw text with a non-existent font name.
-    FontSelectError {
-        /// The non-existent font that ggez tried to load.
-        font: String,
-    },
-    /// Something went wrong when asynchronously mapping a GPU buffer.
-    BufferAsyncError(wgpu::BufferAsyncError),
+
+    /// Something went wrong when spawning a task with `futures`.
+    SpawnError(futures::task::SpawnError),
+
     /// Deadlock when trying to lock a mutex.
     LockError,
-    /// A custom error type for use by users of ggez.
-    /// This lets you handle custom errors that may happen during your game (such as, trying to load a malformed file for a level)
-    /// using the same mechanism you handle ggez's other errors.
-    ///
-    /// Please include an informative message with the error.
-    CustomError(String),
 }
 
 impl fmt::Display for GameError {
@@ -76,7 +83,6 @@ impl fmt::Display for GameError {
                 s, paths
             ),
             GameError::WindowError(e) => write!(f, "Window creation error: {}", e),
-            GameError::CustomError(s) => write!(f, "Custom error: {}", s),
             GameError::RequestDeviceError(e) => {
                 write!(f, "Failed to request logical device: {}", e)
             }

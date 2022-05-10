@@ -2,7 +2,7 @@ use super::{
     context::GraphicsContext, gpu::arc::ArcBuffer, Canvas, Color, Draw, DrawMode, DrawParam,
     Drawable, LinearColor, Rect, WgpuContext,
 };
-use crate::{GameError, GameResult};
+use crate::GameResult;
 use lyon::{
     math::Point as LPoint,
     path::{traits::PathBuilder, Polygon},
