@@ -35,7 +35,7 @@ pub enum GameError {
     /// Something went wrong applying video settings.
     VideoError(String),
     /// Something went wrong with the `gilrs` gamepad-input library.
-    GamepadError(String),
+    GamepadError(gilrs::Error),
     /// Something went wrong with the `lyon` shape-tesselation library.
     LyonError(String),
     /// Something went wrong when spawning a task with `futures`.
@@ -162,8 +162,7 @@ impl From<winit::error::OsError> for GameError {
 #[cfg(feature = "gamepad")]
 impl From<gilrs::Error> for GameError {
     fn from(s: gilrs::Error) -> GameError {
-        let errstr = format!("Gamepad error: {}", s);
-        GameError::GamepadError(errstr)
+        GameError::GamepadError(s)
     }
 }
 
