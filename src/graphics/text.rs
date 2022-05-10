@@ -271,7 +271,7 @@ impl Text {
                         scale: text.scale.unwrap_or(self.scale),
                         font_id: *fonts
                             .get(font)
-                            .ok_or_else(|| GameError::FontSelectError(font.clone()))?,
+                            .ok_or_else(|| GameError::FontSelectError { font: font.clone() })?,
                         extra: Extra {
                             color: text.color.unwrap_or(param.color).into(),
                             transform: param.transform.to_bare_matrix().into(),

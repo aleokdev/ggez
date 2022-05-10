@@ -43,7 +43,10 @@ pub enum GameError {
     /// Something went wrong when drawing text.
     GlyphBrushError(glyph_brush::BrushError),
     /// Attempted to draw text with a non-existent font name.
-    FontSelectError(String),
+    FontSelectError {
+        /// The non-existent font that ggez tried to load.
+        font: String,
+    },
     /// Something went wrong when asynchronously mapping a GPU buffer.
     BufferAsyncError(wgpu::BufferAsyncError),
     /// Deadlock when trying to lock a mutex.
@@ -58,25 +61,25 @@ pub enum GameError {
 
 impl fmt::Display for GameError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            GameError::ConfigError(ref s) => write!(f, "Config error: {}", s),
-            GameError::ResourceLoadError(ref s) => write!(f, "Error loading resource: {}", s),
-            GameError::ResourceNotFound(ref s, ref paths) => write!(
+        match self {
+            GameError::ConfigError(s) => write!(f, "Config error: {}", s),
+            GameError::ResourceLoadError(s) => write!(f, "Error loading resource: {}", s),
+            GameError::ResourceNotFound(s, paths) => write!(
                 f,
                 "Resource not found: {}, searched in paths {:?}",
                 s, paths
             ),
-            GameError::WindowError(ref e) => write!(f, "Window creation error: {}", e),
-            GameError::CustomError(ref s) => write!(f, "Custom error: {}", s),
-            GameError::RequestDeviceError(ref e) => {
+            GameError::WindowError(e) => write!(f, "Window creation error: {}", e),
+            GameError::CustomError(s) => write!(f, "Custom error: {}", s),
+            GameError::RequestDeviceError(e) => {
                 write!(f, "Failed to request logical device: {}", e)
             }
-            GameError::SpawnError(ref e) => {
+            GameError::SpawnError(e) => {
                 write!(f, "Failed to spawn a task with `futures`: {}", e)
             }
-            GameError::GlyphBrushError(ref e) => write!(f, "Text rendering error: {}", e),
-            GameError::FontSelectError(ref e) => write!(f, "No such font '{}'", e),
-            GameError::BufferAsyncError(ref e) => write!(f, "Async buffer map error: {}", e),
+            GameError::GlyphBrushError(e) => write!(f, "Text rendering error: {}", e),
+            GameError::FontSelectError { font } => write!(f, "No such font '{}'", font),
+            GameError::BufferAsyncError(e) => write!(f, "Async buffer map error: {}", e),
             _ => write!(f, "GameError {:?}", self),
         }
     }
@@ -84,14 +87,14 @@ impl fmt::Display for GameError {
 
 impl Error for GameError {
     fn cause(&self) -> Option<&dyn Error> {
-        match *self {
-            GameError::RequestDeviceError(ref e) => Some(e),
-            GameError::WindowCreationError(ref e) => Some(&**e),
-            GameError::IOError(ref e) => Some(&**e),
-            GameError::FontError(ref e) => Some(e),
-            GameError::SpawnError(ref e) => Some(e),
-            GameError::GlyphBrushError(ref e) => Some(e),
-            GameError::BufferAsyncError(ref e) => Some(e),
+        match self {
+            GameError::RequestDeviceError(e) => Some(e),
+            GameError::WindowCreationError(e) => Some(&**e),
+            GameError::IOError(e) => Some(&**e),
+            GameError::FontError(e) => Some(e),
+            GameError::SpawnError(e) => Some(e),
+            GameError::GlyphBrushError(e) => Some(e),
+            GameError::BufferAsyncError(e) => Some(e),
             _ => None,
         }
     }
