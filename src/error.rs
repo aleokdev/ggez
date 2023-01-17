@@ -4,6 +4,8 @@ use std::fmt;
 use std::string::FromUtf8Error;
 use std::sync::Arc;
 
+use crate::filesystem::FilesystemError;
+
 /// An enum containing all kinds of game framework errors.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -11,8 +13,7 @@ pub enum GameError {
     /// An error when intializing the graphics system.
     GraphicsInitializationError,
     /// An error in the filesystem layout
-    // TODO: Switch string by new FilesystemError enum type
-    FilesystemError(String),
+    FilesystemError(FilesystemError),
     /// An error in the config file
     ConfigError(String),
 
@@ -233,5 +234,11 @@ impl From<glyph_brush::BrushError> for GameError {
 impl From<wgpu::BufferAsyncError> for GameError {
     fn from(s: wgpu::BufferAsyncError) -> GameError {
         GameError::BufferAsyncError(s)
+    }
+}
+
+impl From<FilesystemError> for GameError {
+    fn from(s: FilesystemError) -> Self {
+        GameError::FilesystemError(s)
     }
 }

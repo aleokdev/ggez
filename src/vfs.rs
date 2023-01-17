@@ -96,42 +96,42 @@ impl OpenOptions {
 #[allow(clippy::upper_case_acronyms)]
 pub trait VFS: Debug {
     /// Open the file at this path with the given options
-    fn open_options(&self, path: &Path, open_options: OpenOptions) -> GameResult<Box<dyn VFile>>;
+    fn open_options(&self, path: &Path, open_options: OpenOptions) -> VfsResult<Box<dyn VFile>>;
     /// Open the file at this path for reading
-    fn open(&self, path: &Path) -> GameResult<Box<dyn VFile>> {
+    fn open(&self, path: &Path) -> VfsResult<Box<dyn VFile>> {
         self.open_options(path, OpenOptions::new().read(true))
     }
     /// Open the file at this path for writing, truncating it if it exists already
-    fn create(&self, path: &Path) -> GameResult<Box<dyn VFile>> {
+    fn create(&self, path: &Path) -> VfsResult<Box<dyn VFile>> {
         self.open_options(
             path,
             OpenOptions::new().write(true).create(true).truncate(true),
         )
     }
     /// Open the file at this path for appending, creating it if necessary
-    fn append(&self, path: &Path) -> GameResult<Box<dyn VFile>> {
+    fn append(&self, path: &Path) -> VfsResult<Box<dyn VFile>> {
         self.open_options(
             path,
             OpenOptions::new().write(true).create(true).append(true),
         )
     }
     /// Create a directory at the location by this path
-    fn mkdir(&self, path: &Path) -> GameResult;
+    fn mkdir(&self, path: &Path) -> VfsResult;
 
     /// Remove a file or an empty directory.
-    fn rm(&self, path: &Path) -> GameResult;
+    fn rm(&self, path: &Path) -> VfsResult;
 
     /// Remove a file or directory and all its contents
-    fn rmrf(&self, path: &Path) -> GameResult;
+    fn rmrf(&self, path: &Path) -> VfsResult;
 
     /// Check if the file exists
     fn exists(&self, path: &Path) -> bool;
 
     /// Get the file's metadata
-    fn metadata(&self, path: &Path) -> GameResult<Box<dyn VMetadata>>;
+    fn metadata(&self, path: &Path) -> VfsResult<Box<dyn VMetadata>>;
 
     /// Retrieve all file and directory entries in the given directory.
-    fn read_dir(&self, path: &Path) -> GameResult<Box<dyn Iterator<Item = GameResult<PathBuf>>>>;
+    fn read_dir(&self, path: &Path) -> VfsResult<Box<dyn Iterator<Item = VfsResult<PathBuf>>>>;
 
     /// Retrieve the actual location of the VFS root, if available.
     fn to_path_buf(&self) -> Option<PathBuf>;
@@ -454,10 +454,42 @@ impl OverlayFS {
     }
 }
 
+#[derive(Debug)]
+pub enum VfsError {
+    ResourceNotFound {
+        name: String,
+        paths_tried: Vec<(std::path::PathBuf, VfsError)>,
+    },
+    IoError(std::io::Error),
+}
+
+impl std::fmt::Display for VfsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VfsError::ResourceNotFound { name, paths_tried } => f.write_fmt(format_args!(
+                "could not find '{}', searched in: {:?}",
+                name, paths_tried
+            )),
+            VfsError::IoError(err) => f.write_fmt(format_args!("vfs io error: {}", err)),
+        }
+    }
+}
+
+impl std::error::Error for VfsError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            VfsError::IoError(err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
+pub type VfsResult<T = ()> = Result<T, VfsError>;
+
 impl VFS for OverlayFS {
     /// Open the file at this path with the given options
-    fn open_options(&self, path: &Path, open_options: OpenOptions) -> GameResult<Box<dyn VFile>> {
-        let mut tried: Vec<(PathBuf, GameError)> = vec![];
+    fn open_options(&self, path: &Path, open_options: OpenOptions) -> VfsResult<Box<dyn VFile>> {
+        let mut tried: Vec<(PathBuf, VfsError)> = vec![];
 
         for vfs in &self.roots {
             match vfs.open_options(path, open_options) {
@@ -472,11 +504,14 @@ impl VFS for OverlayFS {
             }
         }
         let errmessage = String::from(convenient_path_to_str(path)?);
-        Err(GameError::ResourceNotFound(errmessage, tried))
+        Err(VfsError::ResourceNotFound {
+            name: errmessage,
+            paths_tried: tried,
+        })
     }
 
     /// Create a directory at the location by this path
-    fn mkdir(&self, path: &Path) -> GameResult {
+    fn mkdir(&self, path: &Path) -> VfsResult {
         for vfs in &self.roots {
             match vfs.mkdir(path) {
                 Err(_) => (),
