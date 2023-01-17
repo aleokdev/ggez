@@ -356,8 +356,20 @@ pub enum NumSamples {
     */
 }
 
+/// Thrown by the [`TryFrom`] impl of [`NumSamples`] when the number of samples given is not within the variants of [`NumSamples`].
+#[derive(Debug, Clone, Copy)]
+pub struct InvalidSampleCountError;
+
+impl std::fmt::Display for InvalidSampleCountError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Invalid number of samples")
+    }
+}
+
+impl std::error::Error for InvalidSampleCountError {}
+
 impl TryFrom<u8> for NumSamples {
-    type Error = GameError;
+    type Error = InvalidSampleCountError;
     fn try_from(i: u8) -> Result<Self, Self::Error> {
         match i {
             1 => Ok(NumSamples::One),
@@ -365,9 +377,7 @@ impl TryFrom<u8> for NumSamples {
             4 => Ok(NumSamples::Four),
             //8 => Ok(NumSamples::Eight),
             //16 => Ok(NumSamples::Sixteen),
-            _ => Err(GameError::ConfigError(String::from(
-                "Invalid number of samples",
-            ))),
+            _ => Err(InvalidSampleCountError),
         }
     }
 }

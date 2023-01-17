@@ -6,21 +6,18 @@ use std::sync::Arc;
 
 /// An enum containing all kinds of game framework errors.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum GameError {
     /// An error when intializing the graphics system.
     GraphicsInitializationError,
     /// An error in the filesystem layout
+    // TODO: Switch string by new FilesystemError enum type
     FilesystemError(String),
     /// An error in the config file
     ConfigError(String),
 
     /// Something went wrong trying to read from a file
-    #[allow(clippy::upper_case_acronyms)]
-    IOError(Arc<std::io::Error>),
-
-    /// Happens when an `winit::event_loop::EventLoopProxy` attempts to
-    /// wake up an `winit::event_loop::EventLoop` that no longer exists.
-    EventLoopError(String),
+    IoError(Arc<std::io::Error>),
 
     /// An error trying to load a resource, such as getting an invalid image file.
     ResourceLoadError(String),
@@ -43,6 +40,7 @@ pub enum GameError {
     AudioDecodeError(rodio::decoder::DecoderError),
 
     /// Something went wrong trying to set or get window properties.
+    // TODO: Switch string by new WindowError enum type
     WindowError(String),
     /// Something went wrong trying to create a window
     WindowCreationError(Arc<winit::error::OsError>),
@@ -58,9 +56,8 @@ pub enum GameError {
     GamepadError(gilrs::Error),
 
     /// Something went wrong in the renderer
+    // TODO: Switch string by new RenderError enum type
     RenderError(String),
-    /// Something went wrong with the `lyon` shape-tesselation library.
-    LyonError(String),
     /// Something went wrong when drawing text.
     GlyphBrushError(glyph_brush::BrushError),
     /// Something went wrong when asynchronously mapping a GPU buffer.
@@ -111,7 +108,7 @@ impl Error for GameError {
         match self {
             GameError::RequestDeviceError(e) => Some(e),
             GameError::WindowCreationError(e) => Some(&**e),
-            GameError::IOError(e) => Some(&**e),
+            GameError::IoError(e) => Some(&**e),
             GameError::FontError(e) => Some(e),
             GameError::GlyphBrushError(e) => Some(e),
             GameError::BufferAsyncError(e) => Some(e),
@@ -125,7 +122,7 @@ pub type GameResult<T = ()> = Result<T, GameError>;
 
 impl From<std::io::Error> for GameError {
     fn from(e: std::io::Error) -> GameError {
-        GameError::IOError(Arc::new(e))
+        GameError::IoError(Arc::new(e))
     }
 }
 
@@ -217,7 +214,7 @@ impl From<Arc<winit::error::OsError>> for GameError {
 
 impl From<Arc<std::io::Error>> for GameError {
     fn from(s: Arc<std::io::Error>) -> GameError {
-        GameError::IOError(s)
+        GameError::IoError(s)
     }
 }
 
