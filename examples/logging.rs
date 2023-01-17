@@ -9,9 +9,10 @@
 use log::*;
 
 use ggez::conf::{WindowMode, WindowSetup};
-use ggez::event::{EventHandler, KeyCode, KeyMods};
+use ggez::event::EventHandler;
 use ggez::filesystem::File;
 use ggez::graphics;
+use ggez::input::keyboard::{KeyCode, KeyInput};
 use ggez::timer;
 use ggez::{Context, ContextBuilder, GameResult};
 use std::io::Write;
@@ -66,7 +67,7 @@ struct App {
 
 impl App {
     #[allow(clippy::new_ret_no_self, clippy::unnecessary_wraps)]
-    /// Creates an instance, takes ownership of passed FileLogger.
+    /// Creates an instance, takes ownership of passed `FileLogger`.
     fn new(_ctx: &mut Context, logger: FileLogger) -> GameResult<App> {
         Ok(App {
             file_logger: logger,
@@ -89,28 +90,22 @@ impl EventHandler for App {
 
     /// Draws the screen. We don't really have anything to draw.
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        graphics::Canvas::from_frame(&ctx.gfx, graphics::Color::from([0.1, 0.2, 0.3, 1.0]))
-            .finish(&mut ctx.gfx)?;
+        graphics::Canvas::from_frame(ctx, graphics::Color::from([0.1, 0.2, 0.3, 1.0]))
+            .finish(ctx)?;
         timer::yield_now();
         Ok(())
     }
 
     /// Called when `ggez` catches a keyboard key being pressed.
-    fn key_down_event(
-        &mut self,
-        ctx: &mut Context,
-        keycode: KeyCode,
-        keymod: KeyMods,
-        repeat: bool,
-    ) -> GameResult {
+    fn key_down_event(&mut self, ctx: &mut Context, input: KeyInput, repeated: bool) -> GameResult {
         // Log the keypress to info channel!
         info!(
             "Key down event: {:?}, modifiers: {:?}, repeat: {}",
-            keycode, keymod, repeat
+            input.keycode, input.mods, repeated
         );
-        if keycode == KeyCode::Escape {
+        if input.keycode == Some(KeyCode::Escape) {
             // Escape key closes the app.
-            ggez::event::quit(ctx);
+            ctx.request_quit();
         }
         Ok(())
     }
@@ -135,7 +130,7 @@ pub fn main() -> GameResult {
                 record.level(),
                 record.target(),
                 message
-            ))
+            ));
         })
         // `gfx_device_gl` is very chatty on info loglevel, so
         // filter that a bit more strictly.

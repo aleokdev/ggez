@@ -1,9 +1,137 @@
+# 0.8.1
+
+## Fixed
+- Fixed broken `InstanceArray::resize` and improved its documentation
+
+# 0.8.0 (wgpu)
+
+The biggest change in this version is the long awaited redo of our graphics stack, which used to be based on `gfx-rs`
+and is now using `wgpu`. This gives us more reliability going into the future and fixes many bugs, albeit costing us
+some portability to low-level hardware (looking at you Pi 3; EDIT: and... [Pi 4 as well?](https://github.com/ggez/ggez/issues/1093) o_o ).
+
+Credit goes out to our wonderful contributors, with special thanks to [@jazzfool](https://github.com/jazzfool)
+and [@aleokdev](https://github.com/aleokdev), for putting so much work and patience into the graphics stack.
+
+As there are too many changes to simply list them in the usual fashion, let's look at them topic by topic:
+
+## Changes in the graphics API
+
+With the redo of the graphics stack some parts of the API changes with it, most notably canvases and the shader API.
+
+### Canvas
+
+First of all, each draw call is now explicitly bound to a `Canvas`. This means instead of "setting" the active canvas and
+then drawing implicitly on that canvas you now call `canvas.draw(...)` or `drawable.draw(canvas, ...)`. And then, once
+you're done drawing on it, you call `canvas.finish(ctx)`.
+This helps to keep track of the active canvas and gives you more explicit renderpasses to work with, as `Canvas` is now
+no longer a special image that you can draw to, but a wrapped `wgpu` renderpass, operating naturally on whatever image
+you pass it, or on the screen buffer itself.
+
+The downside of this is that it's a bit more verbose and that you have to pass around your canvas to be able to draw.
+
+### Shader
+
+There's a new struct `ShaderParams`allowing you to pass images, samplers and uniforms to shaders.
+Both `ShaderParam`s and `Shader`s are now set per `Canvas` (as well as blend modes and projection matrices).
+
+`Shader`s and `ShaderParam`s are created through `ShaderBuilder` and `ShaderParamBuilder` respectively, allowing you to
+only set the parameters you're interested in, without worrying about the rest.
+
+Uniforms are now no longer created using the `gfx!` macro. No need to include `gfx-rs` in your own project, just to be
+able to create shader uniforms. Now, simply deriving `AsStd140` is all you usually need (see the shader examples).
+At the time of writing you're sadly also required to depend on `crevice 0.11` directly, as `AsStd140` needs to have it
+visible globally (and re-exporting it on our side doesn't seem to be enough). If you know a way around this, let us know!
+
+### InstanceArray
+
+`SpriteBatch` and `MeshBatch` have been replaced by `InstanceArray`, a more generic "batch" that also features internal z-ordering.
+
+### Z-Order
+
+Before, the order of draws had been determined solely by order of execution. Now `DrawParam` features an additional
+field `z`, to give you control over the order in which draw calls are placed. This works on the global level, but also
+inside of `InstanceArray`, when requested.
+
+## Sub-contexts
+
+Another field that has seen a bit of love is the modularization of contexts. Sub-contexts are now public and can be borrowed
+and handed around freely. Most module functions used to require `Context` as a whole. These have, for this reason, now been
+deprecated and directly replaced by methods on the sub-contexts.
+
+In situations where multiple sub-contexts are needed (one is the creation of audio sources and one the creation of images
+from paths) you can pass the necessary sub-contexts, or instead just pass `Context` as a whole, just like before, thanks to a little trait-workaround.
+
+The latter applies to all situations in which you'd need one specific sub-context as well.
+If you, for some reason, needed or wanted to split the context, then you can pass only the required sub-context.
+If you didn't split it then you can comfortably hand around and pass the context as a whole, like before.
+
+## Added
+
+* Added touch event to `EventHandler`
+* Added access to scancodes in both keyboard events and keyboard context methods, allowing you to make your game
+ portable across the different keyboard letter layouts of different countries
+* Added `Canvas::set_scissor_rect` allowing you to restrict drawing to a part of your surface
+* Added `is_key_just_pressed` and `is_key_just_released` to keyboard context
+* Added an option for transparent windows
+* Added the ability to build your own `BlendMode`s built from the components offered through wgpu's `BlendComponent` struct
+* Exposed rodio API for skipping the first part of a sample
+* Added `audio` and `gamepad` as crate features, allowing you to disable them if not necessary
+* Added the `zip-compression` feature (as part of the default features), now allowing the use of zip-files with compression 
+* Added `Rect::overlaps_circle`
+* Added `Context::request_quit` as a replacement for `event::quit`
+  * `Context::request_quit` works like `event::quit` did before, except that instead of directly breaking the game loop it
+  now triggers a `quit_event`, which allows you to handle all attempts to quit the game in one place.
+* Added a re-export for `glam`, as ggez is aimed at beginners for whom it's convenient to just have it at hand directly; most people will want/need to use it anyway
+* Added `logical_size` as optional argument in `WindowMode` which overrides width/height with a `LogicalSize` which supports high DPI systems.
+
+## Changed
+
+The following list doesn't repeat the changes already mentioned above.
+
+* Relaxed the error type of `EventHandler` from `std::error::Error` into `std::fmt::Debug`, allowing you to use
+ things like `anyhow::error` as error types as well
+* Made offset on `Text` relative (I know, I know, we've been changing this around a lot lately, but I hope we're finally
+  done now), as it makes things like centering text on positions easier (see the blend modes example)
+* Also `Text` is now a first class citizen and can be drawn normally with `DrawParam`, implementing things like rotation
+ that weren't possible in batched text rendering before
+* Changed how bounds on Text work as well as layouting
+  * `Text::set_bounds` now expects width and height of the bounds, but not the destination point, as that's handled through the `DrawParam`
+  * additionally to horizontal alignment vertical alignment is now possible as well
+* Improved `Text` performance through better glyph re-use
+* Changed the `Drawable` trait; this will downstream require changes in projects like `ggez-egui`
+* Version bumped `zip` to 0.6, `directories` to 4.0.1, `winit` to 0.27.3, image to `0.24` and `rodio` to 0.16
+* As each `Canvas` now keeps track of its own projection matrix the `screen_coordinates` of each `Canvas` now start out
+ with the same dimensions as the `Canvas` surface
+
+## Deprecated
+
+* Most of the module level functions, which have been  replaced by sub-context methods
+
+## Removed
+
+* Removed `duration_to_f64` and `f64_to_duration` as the std library now already contains this
+ functionality itself
+* Removed `From<tuple>` implementations for `DrawParam`, as they're non-transparent and weird
+* Removed `event::quit`, as it was replaced by `Context::request_quit`
+* Removed the ability to update only parts of the `DrawParams` inside a `MeshBatch` (now `InstanceArray`)
+  * If you want that ability back let us know! Atm it's staged as "maybe in `0.8.1`" 
+
+## Fixed
+Many graphics bugs that were caused by the use of the discontinued `gfx-rs` were fixed by the switch to `wgpu`. The
+following list is very probably not complete.
+
+* Multisampling on canvases is now no longer based on dirty workarounds, but on the inner workings of `wgpu`,
+ supporting it naturally
+* Fixed zip `read_dir` not working deeper than one level on Windows
+* Fixed a memory leak on `set_screen_coordinates` on Windows 11
+* Fixed not being able to take screenshots of anti-aliased targets
+
 # 0.7.0
 
 ## Added
 
 * Added `filesystem::zip_dir`
-* Expanded/improved documentation 
+* Expanded/improved documentation
 
 ## Changed
 
@@ -27,7 +155,7 @@ Nothing
 
 ## Fixed
 
-* Finally fixed/implemented MSAA on canvases. As `gfx` doesn't provide us with the necessary tools to do so directly, 
+* Finally fixed/implemented MSAA on canvases. As `gfx` doesn't provide us with the necessary tools to do so directly,
   the implementation is internally based upon a fragment shader workaround, which doesn't work on GLES.
 * Made sure that the bounding box of `Mesh` is actually updated when `Mesh::set_vertices` is called
 
@@ -103,7 +231,7 @@ Nothing
 
  * `EventHandler` now takes an error type as a parameter, which allows you to use your own error types
  * `FullscreenType::True` now causes the game to be rendered exclusively on the current monitor, which also allows
-   to set different resolutions  
+   to set different resolutions
  * Changed blend modes massively in the hope that they're either more "correct" or helpful now
  * Changed the way `SpriteBatch` reacts to `DrawParam`s with an offset != (0,0): It now calculates its own dimensions
    (a rectangle containing all sprites) and interprets the offset as a fraction of that
@@ -120,7 +248,7 @@ Nothing
  * Updated just about every other dependency under the sun
  * Minimum rustc version is now 1.42
  * Audio API in general changed a little for `rodio` API differences.
- 
+
 ## Deprecated
 
 Nothing
@@ -138,7 +266,7 @@ Nothing
  * Setting `DrawParam`s now results in consistent behaviour <del>everywhere</del> (ok, no, we missed `MeshBatch`,
    which received this fix in 0.6.1), including `SpriteBatch` and `Canvas`
  * Fixed a memory leak in `screenshot` and `to_rgba8`
- * Fixed `transfrom_rect` (and added some more tests for it)   
+ * Fixed `transfrom_rect` (and added some more tests for it)
  * Too many things to count
 
 ## Broken

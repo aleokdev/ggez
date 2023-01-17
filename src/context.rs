@@ -1,3 +1,5 @@
+//! The `context` module contains functions and traits related to using the `Context` type.
+
 use std::fmt;
 /// We re-export winit so it's easy for people to use the same version as we are
 /// without having to mess around figuring it out.
@@ -9,6 +11,7 @@ use crate::conf;
 use crate::error::GameResult;
 use crate::filesystem::Filesystem;
 use crate::graphics;
+use crate::graphics::GraphicsContext;
 use crate::input;
 use crate::timer;
 
@@ -36,7 +39,7 @@ pub struct Context {
     /// Filesystem state.
     pub fs: Filesystem,
     /// Graphics state.
-    pub gfx: crate::graphics::context::GraphicsContext,
+    pub gfx: GraphicsContext,
     /// Timer state.
     pub time: timer::TimeContext,
     /// Audio context.
@@ -55,8 +58,104 @@ pub struct Context {
     /// updating it will have no effect.
     pub(crate) conf: conf::Conf,
     /// Controls whether or not the event loop should be running.
-    /// Set this with `ggez::event::quit()`.
+    /// This is internally controlled by the outcome of [`quit_event`](crate::event::EventHandler::quit_event),
+    /// requested through [`event::request_quit()`](crate::Context::request_quit).
     pub continuing: bool,
+    /// Whether or not a `quit_event` has been requested.
+    /// Set this with [`ggez::event::request_quit()`](crate::Context::request_quit).
+    ///
+    /// It's exposed here for people who want to roll their own event loop.
+    pub quit_requested: bool,
+}
+
+impl Context {
+    /// Attempts to terminate the [`ggez::event::run()`](crate::event::run) loop by requesting a
+    /// [`quit_event`](crate::event::EventHandler::quit_event) at the very start of the next frame. If this event
+    /// returns `Ok(false)`, then [`Context.continuing`](struct.Context.html#structfield.continuing)
+    /// is set to `false` and the loop breaks.
+    pub fn request_quit(&mut self) {
+        self.quit_requested = true;
+    }
+}
+
+// This is ugly and hacky but greatly improves ergonomics.
+
+/// Used to represent types that can provide a certain context type.
+///
+/// If you don't know what this is, you most likely want to pass `ctx`.
+///
+/// This trait is basically syntactical sugar, saving you from having
+/// to split contexts when you don't need to and also shortening calls like
+/// ```rust
+/// # use ggez::GameResult;
+/// # fn t(ctx: &mut ggez::Context, canvas: ggez::graphics::Canvas) -> GameResult {
+/// canvas.finish(&mut ctx.gfx)?;
+/// # Ok(())
+/// # }
+/// ```
+/// into just
+/// ```rust
+/// # use ggez::GameResult;
+/// # fn t(ctx: &mut ggez::Context, canvas: ggez::graphics::Canvas) -> GameResult {
+/// canvas.finish(ctx)?;
+/// # Ok(())
+/// # }
+/// ```
+pub trait Has<T> {
+    /// Method to retrieve the context type.
+    fn retrieve(&self) -> &T;
+}
+
+impl<T> Has<T> for T {
+    #[inline]
+    fn retrieve(&self) -> &T {
+        self
+    }
+}
+
+impl Has<Filesystem> for Context {
+    #[inline]
+    fn retrieve(&self) -> &Filesystem {
+        &self.fs
+    }
+}
+
+impl Has<GraphicsContext> for Context {
+    #[inline]
+    fn retrieve(&self) -> &GraphicsContext {
+        &self.gfx
+    }
+}
+
+#[cfg(feature = "audio")]
+impl Has<audio::AudioContext> for Context {
+    #[inline]
+    fn retrieve(&self) -> &audio::AudioContext {
+        &self.audio
+    }
+}
+
+/// Used to represent types that can provide a certain context type in a mutable form.
+/// See also [`Has<T>`].
+///
+/// If you don't know what this is, you most likely want to pass `ctx`.
+pub trait HasMut<T> {
+    /// Method to retrieve the context type as mutable.
+    fn retrieve_mut(&mut self) -> &mut T;
+}
+
+impl<T> HasMut<T> for T {
+    #[inline]
+    fn retrieve_mut(&mut self) -> &mut T {
+        self
+    }
+}
+
+impl HasMut<GraphicsContext> for Context {
+    #[inline]
+    fn retrieve_mut(&mut self) -> &mut GraphicsContext {
+        &mut self.gfx
+    }
 }
 
 impl fmt::Debug for Context {
@@ -69,21 +168,23 @@ impl Context {
     /// Tries to create a new Context using settings from the given [`Conf`](../conf/struct.Conf.html) object.
     /// Usually called by [`ContextBuilder::build()`](struct.ContextBuilder.html#method.build).
     fn from_conf(
+        game_id: &str,
         conf: conf::Conf,
-        mut fs: Filesystem,
+        fs: Filesystem,
     ) -> GameResult<(Context, winit::event_loop::EventLoop<()>)> {
         #[cfg(feature = "audio")]
-        let audio_context = audio::AudioContext::new()?;
+        let audio_context = audio::AudioContext::new(&fs)?;
         let events_loop = winit::event_loop::EventLoop::new();
         let timer_context = timer::TimeContext::new();
         let graphics_context =
-            graphics::context::GraphicsContext::new(&events_loop, &conf, &mut fs)?;
+            graphics::context::GraphicsContext::new(game_id, &events_loop, &conf, &fs)?;
 
         let ctx = Context {
             conf,
             fs,
             gfx: graphics_context,
             continuing: true,
+            quit_requested: false,
             time: timer_context,
             #[cfg(feature = "audio")]
             audio: audio_context,
@@ -220,7 +321,7 @@ impl ContextBuilder {
 
     /// Build the `Context`.
     pub fn build(self) -> GameResult<(Context, winit::event_loop::EventLoop<()>)> {
-        let mut fs = Filesystem::new(
+        let fs = Filesystem::new(
             self.game_id.as_ref(),
             self.author.as_ref(),
             &self.resources_dir_name,
@@ -241,6 +342,39 @@ impl ContextBuilder {
             self.conf
         };
 
-        Context::from_conf(config, fs)
+        Context::from_conf(self.game_id.as_ref(), config, fs)
+    }
+}
+
+/// Terminates the [`ggez::event::run()`](crate::event::run) loop _without_ requesting a
+/// [`quit_event`](crate::event::EventHandler::quit_event). [`Context.continuing`](struct.Context.html#structfield.continuing)
+/// is set to `false` and the loop breaks.
+#[deprecated(
+    since = "0.8.0",
+    note = "Use [`ctx.request_quit`](struct.Context.html#method.request_quit) instead."
+)]
+pub fn quit(ctx: &mut Context) {
+    ctx.continuing = false;
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        context::{Has, HasMut},
+        graphics::GraphicsContext,
+        ContextBuilder,
+    };
+
+    #[test]
+    fn has_traits() {
+        let (mut ctx, _event_loop) = ContextBuilder::new("test", "ggez").build().unwrap();
+
+        fn takes_gfx(_gfx: &impl Has<GraphicsContext>) {}
+        takes_gfx(&ctx);
+        takes_gfx(&ctx.gfx);
+
+        fn takes_mut_gfx(_gfx: &mut impl HasMut<GraphicsContext>) {}
+        takes_mut_gfx(&mut ctx);
+        takes_mut_gfx(&mut ctx.gfx);
     }
 }

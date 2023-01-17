@@ -5,10 +5,12 @@
 //! using the `Premultiplied` blend mode
 //! (for more explanations on this see https://github.com/ggez/ggez/issues/694#issuecomment-853724926)
 
+use ggez::context::HasMut;
 use ggez::event::{self, EventHandler};
+use ggez::glam::Vec2;
 use ggez::graphics::{self, BlendMode, Color, DrawParam, GraphicsContext};
+use ggez::input::keyboard::KeyInput;
 use ggez::{Context, GameResult};
-use glam::Vec2;
 use std::env;
 use std::path;
 
@@ -20,10 +22,10 @@ struct MainState {
 
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
-        let layer = graphics::ScreenImage::new(&ctx.gfx, None, 1., 1., 1);
+        let layer = graphics::ScreenImage::new(ctx, None, 1., 1., 1);
 
         let circle = graphics::Mesh::new_circle(
-            &ctx.gfx,
+            ctx,
             graphics::DrawMode::fill(),
             Vec2::new(0.0, 0.0),
             45.0,
@@ -41,11 +43,11 @@ impl MainState {
 
     fn draw_venn(
         &self,
-        _gfx: &mut GraphicsContext,
+        _gfx: &mut impl HasMut<GraphicsContext>,
         canvas: &mut graphics::Canvas,
         pos: Vec2,
         name: &str,
-    ) -> GameResult<()> {
+    ) -> GameResult {
         const TRI_COLORS: [Color; 3] = [
             Color::new(0.8, 0., 0., 0.5),
             Color::new(0., 0.8, 0., 0.5),
@@ -86,70 +88,70 @@ impl MainState {
 
     fn draw_venn_diagrams(
         &mut self,
-        gfx: &mut GraphicsContext,
+        ctx: &mut Context,
         (w, h): (f32, f32),
         canvas: &mut graphics::Canvas,
-    ) -> GameResult<()> {
+    ) -> GameResult {
         let y = h / 4.;
         const MODE_COUNT: usize = 8;
         let x_step = w / (MODE_COUNT + 1) as f32;
 
         // draw with Alpha
         canvas.set_blend_mode(BlendMode::ALPHA);
-        self.draw_venn(gfx, canvas, [x_step, y].into(), "Alpha")?;
+        self.draw_venn(ctx, canvas, [x_step, y].into(), "Alpha")?;
 
         // draw with Add
         canvas.set_blend_mode(BlendMode::ADD);
-        self.draw_venn(gfx, canvas, [x_step * 2., y].into(), "Add")?;
+        self.draw_venn(ctx, canvas, [x_step * 2., y].into(), "Add")?;
 
         // draw with Sub
         canvas.set_blend_mode(BlendMode::SUBTRACT);
-        self.draw_venn(gfx, canvas, [x_step * 3., y].into(), "Subtract")?;
+        self.draw_venn(ctx, canvas, [x_step * 3., y].into(), "Subtract")?;
 
         // draw with Multiply
         canvas.set_blend_mode(BlendMode::MULTIPLY);
-        self.draw_venn(gfx, canvas, [x_step * 4., y].into(), "Multiply")?;
+        self.draw_venn(ctx, canvas, [x_step * 4., y].into(), "Multiply")?;
 
         // draw with Invert
         canvas.set_blend_mode(BlendMode::INVERT);
-        self.draw_venn(gfx, canvas, [x_step * 5., y].into(), "Invert")?;
+        self.draw_venn(ctx, canvas, [x_step * 5., y].into(), "Invert")?;
 
         // draw with Replace
         canvas.set_blend_mode(BlendMode::REPLACE);
-        self.draw_venn(gfx, canvas, [x_step * 6., y].into(), "Replace")?;
+        self.draw_venn(ctx, canvas, [x_step * 6., y].into(), "Replace")?;
 
         // draw with Darken
         canvas.set_blend_mode(BlendMode::DARKEN);
-        self.draw_venn(gfx, canvas, [x_step * 7., y].into(), "Darken")?;
+        self.draw_venn(ctx, canvas, [x_step * 7., y].into(), "Darken")?;
 
         // draw with Lighten
         canvas.set_blend_mode(BlendMode::LIGHTEN);
-        self.draw_venn(gfx, canvas, [x_step * 8., y].into(), "Lighten")?;
+        self.draw_venn(ctx, canvas, [x_step * 8., y].into(), "Lighten")?;
 
         Ok(())
     }
 }
 
 impl EventHandler for MainState {
-    fn update(&mut self, _: &mut Context) -> GameResult<()> {
+    fn update(&mut self, _: &mut Context) -> GameResult {
         Ok(())
     }
 
-    fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
+    fn draw(&mut self, ctx: &mut Context) -> GameResult {
         let (w, h) = ctx.gfx.drawable_size();
 
         // draw everything onto self.layer
-        let layer = self.layer.image(&ctx.gfx);
+        let layer = self.layer.image(ctx);
         let mut canvas =
-            graphics::Canvas::from_image(&ctx.gfx, layer.clone(), Color::new(0., 0., 0., 0.));
-        self.draw_venn_diagrams(&mut ctx.gfx, (w, h), &mut canvas)?;
-        canvas.finish(&mut ctx.gfx)?;
+            graphics::Canvas::from_image(ctx, layer.clone(), Color::new(0., 0., 0., 0.));
+        self.draw_venn_diagrams(ctx, (w, h), &mut canvas)?;
+        canvas.finish(ctx)?;
 
         // now start drawing to the screen
-        let mut canvas = graphics::Canvas::from_frame(&ctx.gfx, Color::new(0.3, 0.3, 0.3, 1.0));
+        let mut canvas = graphics::Canvas::from_frame(ctx, Color::new(0.3, 0.3, 0.3, 1.0));
 
         // draw everything directly onto the screen once
-        self.draw_venn_diagrams(&mut ctx.gfx, (w, h), &mut canvas)?;
+        self.draw_venn_diagrams(ctx, (w, h), &mut canvas)?;
 
         // draw layer onto the screen
         canvas.set_blend_mode(self.layer_blend);
@@ -170,18 +172,12 @@ impl EventHandler for MainState {
             graphics::DrawParam::from([8., 4. + y]).color(Color::WHITE),
         );
 
-        canvas.finish(&mut ctx.gfx)?;
+        canvas.finish(ctx)?;
 
         Ok(())
     }
 
-    fn key_down_event(
-        &mut self,
-        _ctx: &mut Context,
-        _keycode: ggez::event::KeyCode,
-        _keymod: ggez::event::KeyMods,
-        repeat: bool,
-    ) -> GameResult {
+    fn key_down_event(&mut self, _ctx: &mut Context, _input: KeyInput, repeat: bool) -> GameResult {
         if !repeat {
             if self.layer_blend == BlendMode::ALPHA {
                 self.layer_blend = BlendMode::PREMULTIPLIED;

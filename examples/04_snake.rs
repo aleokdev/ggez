@@ -5,7 +5,7 @@
 //! Note that this example is meant to highlight the general
 //! structure of a ggez game. Some of the details may need to
 //! be changed to scale the game. For example, if we needed to
-//! draw hundreds or thousands of shapes, a SpriteBatch is going
+//! draw hundreds or thousands of shapes, a `SpriteBatch` is going
 //! to offer far better performance than the direct draw calls
 //! that this example uses.
 //!
@@ -20,12 +20,13 @@ use oorandom::Rand32;
 // Next we need to actually `use` the pieces of ggez that we are going
 // to need frequently.
 use ggez::{
-    event::{self, KeyCode, KeyMods},
-    graphics, Context, GameResult,
+    event, graphics,
+    input::keyboard::{KeyCode, KeyInput},
+    Context, GameResult,
 };
 
 // We'll bring in some things from `std` to help us in the future.
-use std::collections::LinkedList;
+use std::collections::VecDeque;
 
 // The first thing we want to do is set up some constants that will help us out later.
 
@@ -78,7 +79,7 @@ impl GridPosition {
 
     /// We'll make another helper function that takes one grid position and returns a new one after
     /// making one move in the direction of `dir`.
-    /// We use the [rem_euclid()](https://doc.rust-lang.org/std/primitive.i16.html#method.rem_euclid)
+    /// We use the [`rem_euclid()`](https://doc.rust-lang.org/std/primitive.i16.html#method.rem_euclid)
     /// API when crossing the top/left limits, as the standard remainder function (`%`) returns a
     /// negative value when the left operand is negative.
     /// Only the Up/Left cases require rem_euclid(); for consistency, it's used for all of them.
@@ -93,7 +94,7 @@ impl GridPosition {
 }
 
 /// We implement the `From` trait, which in this case allows us to convert easily between
-/// a GridPosition and a ggez `graphics::Rect` which fills that grid cell.
+/// a `GridPosition` and a ggez `graphics::Rect` which fills that grid cell.
 /// Now we can just call `.into()` on a `GridPosition` where we want a
 /// `Rect` that represents that grid cell.
 impl From<GridPosition> for graphics::Rect {
@@ -129,8 +130,8 @@ impl Direction {
     /// We create a helper function that will allow us to easily get the inverse
     /// of a `Direction` which we can use later to check if the player should be
     /// able to move the snake in a certain direction.
-    pub fn inverse(&self) -> Self {
-        match *self {
+    pub fn inverse(self) -> Self {
+        match self {
             Direction::Up => Direction::Down,
             Direction::Down => Direction::Up,
             Direction::Left => Direction::Right,
@@ -183,7 +184,7 @@ impl Food {
     /// to do drawing.
     ///
     /// Note: this method of drawing does not scale. If you need to render
-    /// a large number of shapes, use an InstanceArray. This approach is fine for
+    /// a large number of shapes, use an `InstanceArray`. This approach is fine for
     /// this example since there are a fairly limited number of calls.
     fn draw(&self, canvas: &mut graphics::Canvas) {
         // First we set the color to draw with, in this case all food will be
@@ -218,9 +219,9 @@ struct Snake {
     /// Then we have the current direction the snake is moving. This is
     /// the direction it will move when `update` is called on it.
     dir: Direction,
-    /// Next we have the body, which we choose to represent as a `LinkedList`
+    /// Next we have the body, which we choose to represent as a `VecDeque`
     /// of `Segment`s.
-    body: LinkedList<Segment>,
+    body: VecDeque<Segment>,
     /// Now we have a property that represents the result of the last update
     /// that was performed. The snake could have eaten nothing (None), Food (Some(Ate::Food)),
     /// or Itself (Some(Ate::Itself))
@@ -237,7 +238,7 @@ struct Snake {
 
 impl Snake {
     pub fn new(pos: GridPosition) -> Self {
-        let mut body = LinkedList::new();
+        let mut body = VecDeque::new();
         // Our snake will initially have a head and one body segment,
         // and will be moving to the right.
         body.push_back(Segment::new((pos.x - 1, pos.y).into()));
@@ -261,7 +262,7 @@ impl Snake {
     /// A helper function that determines whether
     /// the snake eats itself based on its current position
     fn eats_self(&self) -> bool {
-        for seg in self.body.iter() {
+        for seg in &self.body {
             if self.head.pos == seg.pos {
                 return true;
             }
@@ -297,7 +298,7 @@ impl Snake {
         } else if self.eats(food) {
             self.ate = Some(Ate::Food);
         } else {
-            self.ate = None
+            self.ate = None;
         }
         // If we didn't eat anything this turn, we remove the last segment from our body,
         // which gives the illusion that the snake is moving. In reality, all the segments stay
@@ -315,10 +316,10 @@ impl Snake {
     ///
     /// Again, note that this approach to drawing is fine for the limited scope of this
     /// example, but larger scale games will likely need a more optimized render path
-    /// using InstanceArray or something similar that batches draw calls.
+    /// using `InstanceArray` or something similar that batches draw calls.
     fn draw(&self, canvas: &mut graphics::Canvas) {
         // We first iterate through the body segments and draw them.
-        for seg in self.body.iter() {
+        for seg in &self.body {
             // Again we set the color (in this case an orangey color)
             // and then draw the Rect that we convert that Segment's position into
             canvas.draw(
@@ -338,7 +339,7 @@ impl Snake {
     }
 }
 
-/// Now we have the heart of our game, the GameState. This struct
+/// Now we have the heart of our game, the `GameState`. This struct
 /// will implement ggez's `EventHandler` trait and will therefore drive
 /// everything else that happens in our game.
 struct GameState {
@@ -375,7 +376,7 @@ impl GameState {
     }
 }
 
-/// Now we implement EventHandler for GameState. This provides an interface
+/// Now we implement `EventHandler` for `GameState`. This provides an interface
 /// that ggez will call automatically when different events happen.
 impl event::EventHandler<ggez::GameError> for GameState {
     /// Update will happen on every frame before it is drawn. This is where we update
@@ -416,10 +417,8 @@ impl event::EventHandler<ggez::GameError> for GameState {
     /// draw is where we should actually render the game's current state.
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         // First we create a canvas that renders to the frame, and clear it to a (sort of) green color
-        let mut canvas = graphics::Canvas::from_frame(
-            &ctx.gfx,
-            graphics::CanvasLoadOp::Clear([0.0, 1.0, 0.0, 1.0].into()),
-        );
+        let mut canvas =
+            graphics::Canvas::from_frame(ctx, graphics::Color::from([0.0, 1.0, 0.0, 1.0]));
 
         // Then we tell the snake and the food to draw themselves
         self.snake.draw(&mut canvas);
@@ -428,7 +427,7 @@ impl event::EventHandler<ggez::GameError> for GameState {
         // Finally, we "flush" the draw commands.
         // Since we rendered to the frame, we don't need to tell ggez to present anything else,
         // as ggez will automatically present the frame image unless told otherwise.
-        canvas.finish(&mut ctx.gfx)?;
+        canvas.finish(ctx)?;
 
         // We yield the current thread until the next update
         ggez::timer::yield_now();
@@ -436,17 +435,11 @@ impl event::EventHandler<ggez::GameError> for GameState {
         Ok(())
     }
 
-    /// key_down_event gets fired when a key gets pressed.
-    fn key_down_event(
-        &mut self,
-        _ctx: &mut Context,
-        keycode: KeyCode,
-        _keymod: KeyMods,
-        _repeat: bool,
-    ) -> GameResult {
+    /// `key_down_event` gets fired when a key gets pressed.
+    fn key_down_event(&mut self, _ctx: &mut Context, input: KeyInput, _repeat: bool) -> GameResult {
         // Here we attempt to convert the Keycode into a Direction using the helper
         // we defined earlier.
-        if let Some(dir) = Direction::from_keycode(keycode) {
+        if let Some(dir) = input.keycode.and_then(Direction::from_keycode) {
             // If it succeeds, we check if a new direction has already been set
             // and make sure the new direction is different then `snake.dir`
             if self.snake.dir != self.snake.last_update_dir && dir.inverse() != self.snake.dir {

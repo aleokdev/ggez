@@ -1,6 +1,9 @@
 use crevice::std140::AsStd140;
 
-use crate::GameResult;
+use crate::{
+    context::{Has, HasMut},
+    GameError, GameResult,
+};
 
 use super::{
     gpu::arc::{ArcBindGroup, ArcBindGroupLayout},
@@ -25,66 +28,76 @@ pub struct Canvas {
     pub(crate) wgpu: Arc<WgpuContext>,
     draws: BTreeMap<ZIndex, Vec<DrawCommand>>,
     state: DrawState,
+    original_state: DrawState,
     screen: Option<Rect>,
     defaults: DefaultResources,
 
     target: Image,
     resolve: Option<Image>,
-    load_op: CanvasLoadOp,
+    clear: Option<Color>,
+
+    // This will be removed after queue_text and draw_queued_text have been removed.
+    pub(crate) queued_texts: Vec<(Text, mint::Point2<f32>, Option<Color>)>,
 }
 
 impl Canvas {
     /// Create a new [Canvas] from an image. This will allow for drawing to a single color image.
     ///
-    /// The image must be created for Canvas usage, i.e. [Image::new_canvas_image()], or [ScreenImage], and must only have a sample count of 1.
+    /// `clear` will set the image initially to the given color, if a color is provided, or keep it as is, if it's `None`.
+    ///
+    /// The image must be created for Canvas usage, i.e. [`Image::new_canvas_image`()], or [`ScreenImage`], and must only have a sample count of 1.
     #[inline]
     pub fn from_image(
-        gfx: &GraphicsContext,
+        gfx: &impl Has<GraphicsContext>,
         image: Image,
-        load_op: impl Into<CanvasLoadOp>,
+        clear: impl Into<Option<Color>>,
     ) -> Self {
-        Canvas::new(gfx, image, None, load_op.into())
+        Canvas::new(gfx, image, None, clear.into())
     }
 
     /// Helper for [`Canvas::from_image`] for construction of a [`Canvas`] from a [`ScreenImage`].
     #[inline]
     pub fn from_screen_image(
-        gfx: &GraphicsContext,
+        gfx: &impl Has<GraphicsContext>,
         image: &mut ScreenImage,
-        load_op: impl Into<CanvasLoadOp>,
+        clear: impl Into<Option<Color>>,
     ) -> Self {
+        let gfx = gfx.retrieve();
         let image = image.image(gfx);
-        Canvas::from_image(gfx, image, load_op)
+        Canvas::from_image(gfx, image, clear)
     }
 
     /// Create a new [Canvas] from an MSAA image and a resolve target. This will allow for drawing with MSAA to a color image, then resolving the samples into a secondary target.
     ///
-    /// Both images must be created for Canvas usage (see [Canvas::from_image]). `msaa_image` must have a sample count > 1 and `resolve_image` must strictly have a sample count of 1.
+    /// Both images must be created for Canvas usage (see [`Canvas::from_image`]). `msaa_image` must have a sample count > 1 and `resolve_image` must strictly have a sample count of 1.
     #[inline]
     pub fn from_msaa(
-        gfx: &GraphicsContext,
+        gfx: &impl Has<GraphicsContext>,
         msaa_image: Image,
         resolve: Image,
-        load_op: impl Into<CanvasLoadOp>,
+        clear: impl Into<Option<Color>>,
     ) -> Self {
-        Canvas::new(gfx, msaa_image, Some(resolve), load_op.into())
+        Canvas::new(gfx, msaa_image, Some(resolve), clear.into())
     }
 
     /// Helper for [`Canvas::from_msaa`] for construction of an MSAA [`Canvas`] from a [`ScreenImage`].
     #[inline]
     pub fn from_screen_msaa(
-        gfx: &GraphicsContext,
+        gfx: &impl Has<GraphicsContext>,
         msaa_image: &mut ScreenImage,
         resolve: &mut ScreenImage,
-        load_op: impl Into<CanvasLoadOp>,
+        clear: impl Into<Option<Color>>,
     ) -> Self {
         let msaa = msaa_image.image(gfx);
         let resolve = resolve.image(gfx);
-        Canvas::from_msaa(gfx, msaa, resolve, load_op)
+        Canvas::from_msaa(gfx, msaa, resolve, clear)
     }
 
     /// Create a new [Canvas] that renders directly to the window surface.
-    pub fn from_frame(gfx: &GraphicsContext, load_op: impl Into<CanvasLoadOp>) -> Self {
+    ///
+    /// `clear` will set the image initially to the given color, if a color is provided, or keep it as is, if it's `None`.
+    pub fn from_frame(gfx: &impl Has<GraphicsContext>, clear: impl Into<Option<Color>>) -> Self {
+        let gfx = gfx.retrieve();
         // these unwraps will never fail
         let samples = gfx.frame_msaa_image.as_ref().unwrap().samples();
         let (target, resolve) = if samples > 1 {
@@ -95,46 +108,51 @@ impl Canvas {
         } else {
             (gfx.frame_image.clone().unwrap(), None)
         };
-        Canvas::new(gfx, target, resolve, load_op.into())
+        Canvas::new(gfx, target, resolve, clear.into())
     }
 
     fn new(
-        gfx: &GraphicsContext,
+        gfx: &impl Has<GraphicsContext>,
         target: Image,
         resolve: Option<Image>,
-        load_op: CanvasLoadOp,
+        clear: Option<Color>,
     ) -> Self {
+        let gfx = gfx.retrieve();
+
         let defaults = DefaultResources::new(gfx);
 
         let state = DrawState {
-            shader: defaults.shader.clone(),
+            shader: default_shader(),
             params: None,
-            text_shader: defaults.text_shader.clone(),
+            text_shader: default_text_shader(),
             text_params: None,
-            sampler: Sampler::linear_clamp(),
+            sampler: Sampler::default(),
             blend_mode: BlendMode::ALPHA,
             premul_text: true,
             projection: glam::Mat4::IDENTITY.into(),
+            scissor_rect: (0, 0, target.width(), target.height()),
         };
 
-        let drawable_size = gfx.drawable_size();
         let screen = Rect {
             x: 0.,
             y: 0.,
-            w: drawable_size.0 as _,
-            h: drawable_size.1 as _,
+            w: target.width() as _,
+            h: target.height() as _,
         };
 
         let mut this = Canvas {
             wgpu: gfx.wgpu.clone(),
             draws: BTreeMap::new(),
-            state,
+            state: state.clone(),
+            original_state: state,
             screen: Some(screen),
             defaults,
 
             target,
             resolve,
-            load_op,
+            clear,
+
+            queued_texts: Vec::new(),
         };
 
         this.set_screen_coordinates(screen);
@@ -144,8 +162,8 @@ impl Canvas {
 
     /// Sets the shader to use when drawing meshes.
     #[inline]
-    pub fn set_shader(&mut self, shader: Shader) {
-        self.state.shader = shader;
+    pub fn set_shader(&mut self, shader: &Shader) {
+        self.state.shader = shader.clone();
     }
 
     /// Returns the current shader being used when drawing meshes.
@@ -158,8 +176,12 @@ impl Canvas {
     ///
     /// **Bound to bind group 3.**
     #[inline]
-    pub fn set_shader_params<Uniforms: AsStd140>(&mut self, params: ShaderParams<Uniforms>) {
-        self.state.params = Some((params.bind_group.clone(), params.layout));
+    pub fn set_shader_params<Uniforms: AsStd140>(&mut self, params: &ShaderParams<Uniforms>) {
+        self.state.params = Some((
+            params.bind_group.clone().unwrap(/* always Some */),
+            params.layout.clone().unwrap(/* always Some */),
+            params.buffer_offset,
+        ));
     }
 
     /// Sets the shader to use when drawing text.
@@ -178,26 +200,34 @@ impl Canvas {
     ///
     /// **Bound to bind group 3.**
     #[inline]
-    pub fn set_text_shader_params<Uniforms: AsStd140>(&mut self, params: ShaderParams<Uniforms>) {
-        self.state.text_params = Some((params.bind_group.clone(), params.layout));
+    pub fn set_text_shader_params<Uniforms: AsStd140>(
+        &mut self,
+        params: &ShaderParams<Uniforms>,
+    ) -> GameResult {
+        self.state.text_params = Some((
+            params.bind_group.clone().unwrap(/* always Some */),
+            params.layout.clone().unwrap(/* always Some */),
+            params.buffer_offset,
+        ));
+        Ok(())
     }
 
     /// Resets the active mesh shader to the default.
     #[inline]
     pub fn set_default_shader(&mut self) {
-        self.state.shader = self.defaults.shader.clone();
+        self.state.shader = default_shader();
     }
 
     /// Resets the active text shader to the default.
     #[inline]
     pub fn set_default_text_shader(&mut self) {
-        self.state.text_shader = self.defaults.text_shader.clone();
+        self.state.text_shader = default_text_shader();
     }
 
     /// Sets the active sampler used to sample images.
     #[inline]
-    pub fn set_sampler(&mut self, sampler: Sampler) {
-        self.state.sampler = sampler;
+    pub fn set_sampler(&mut self, sampler: impl Into<Sampler>) {
+        self.state.sampler = sampler.into();
     }
 
     /// Returns the currently active sampler used to sample images.
@@ -211,7 +241,7 @@ impl Canvas {
     /// This is equivalent to `set_sampler(Sampler::linear_clamp())`.
     #[inline]
     pub fn set_default_sampler(&mut self) {
-        self.set_sampler(Sampler::linear_clamp());
+        self.set_sampler(Sampler::default());
     }
 
     /// Sets the active blend mode used when drawing images.
@@ -259,7 +289,7 @@ impl Canvas {
     /// Sets the bounds of the screen viewport. This is a shortcut for `set_projection`
     /// and thus will override any previous projection matrix set.
     ///
-    /// The default coordinate system has (0,0) at the top-left corner
+    /// The default coordinate system has \[0.0, 0.0\] at the top-left corner
     /// with X increasing to the right and Y increasing down, with the
     /// viewport scaled such that one coordinate unit is one pixel on the
     /// screen.  This function lets you change this coordinate system to
@@ -281,22 +311,75 @@ impl Canvas {
         self.screen
     }
 
+    /// Sets the scissor rectangle used when drawing. Nothing will be drawn to the canvas
+    /// that falls outside of this region.
+    ///
+    /// Note: The rectangle is in pixel coordinates, and therefore the values will be rounded towards zero.
+    #[inline]
+    pub fn set_scissor_rect(&mut self, rect: Rect) -> GameResult {
+        if rect.w as u32 == 0 || rect.h as u32 == 0 {
+            return Err(GameError::RenderError(String::from(
+                "the scissor rectangle size must be larger than zero.",
+            )));
+        }
+
+        let image_size = (self.target.width(), self.target.height());
+        if rect.x as u32 >= image_size.0 || rect.y as u32 >= image_size.1 {
+            return Err(GameError::RenderError(String::from(
+                "the scissor rectangle cannot start outside the canvas image.",
+            )));
+        }
+
+        // clamp the scissor rectangle to the target image size
+        let rect_width = u32::min(image_size.0 - rect.x as u32, rect.w as u32);
+        let rect_height = u32::min(image_size.1 - rect.y as u32, rect.h as u32);
+
+        self.state.scissor_rect = (rect.x as u32, rect.y as u32, rect_width, rect_height);
+
+        Ok(())
+    }
+
+    /// Returns the scissor rectangle as set by [`Canvas::set_scissor_rect`].
+    #[inline]
+    pub fn scissor_rect(&self) -> Rect {
+        Rect::new(
+            self.state.scissor_rect.0 as f32,
+            self.state.scissor_rect.1 as f32,
+            self.state.scissor_rect.2 as f32,
+            self.state.scissor_rect.3 as f32,
+        )
+    }
+
+    /// Resets the scissorr rectangle back to the original value. This will effectively disable any
+    /// scissoring.
+    #[inline]
+    pub fn set_default_scissor_rect(&mut self) {
+        self.state.scissor_rect = self.original_state.scissor_rect;
+    }
+
     /// Draws the given `Drawable` to the canvas with a given `DrawParam`.
     #[inline]
     pub fn draw(&mut self, drawable: &impl Drawable, param: impl Into<DrawParam>) {
-        drawable.draw(self, param.into())
+        drawable.draw(self, param)
     }
 
     /// Draws a `Mesh` textured with an `Image`.
     ///
     /// This differs from `canvas.draw(mesh, param)` as in that case, the mesh is untextured.
     pub fn draw_textured_mesh(&mut self, mesh: Mesh, image: Image, param: impl Into<DrawParam>) {
-        self.push_draw(Draw::Mesh { mesh, image }, param.into());
+        self.push_draw(
+            Draw::Mesh {
+                mesh,
+                image,
+                scale: false,
+            },
+            param.into(),
+        );
     }
 
     /// Draws an `InstanceArray` textured with a `Mesh`.
     ///
-    /// This differs from `cavnas.draw(instances, param)` as in that case, the instances are
+    /// This differs from `canvas.draw(instances, param)` as in that case, the instances are
     /// drawn as quads.
     pub fn draw_instanced_mesh(
         &mut self,
@@ -309,6 +392,7 @@ impl Canvas {
             Draw::MeshInstances {
                 mesh,
                 instances: InstanceArrayView::from_instances(instances).unwrap(),
+                scale: false,
             },
             param.into(),
         );
@@ -316,7 +400,8 @@ impl Canvas {
 
     /// Finish drawing with this canvas and submit all the draw calls.
     #[inline]
-    pub fn finish(mut self, gfx: &mut GraphicsContext) -> GameResult {
+    pub fn finish(mut self, gfx: &mut impl HasMut<GraphicsContext>) -> GameResult {
+        let gfx = gfx.retrieve_mut();
         self.finalize(gfx)
     }
 
@@ -336,27 +421,31 @@ impl Canvas {
 
     fn finalize(&mut self, gfx: &mut GraphicsContext) -> GameResult {
         let mut canvas = if let Some(resolve) = &self.resolve {
-            InternalCanvas::from_msaa(gfx, self.load_op, &self.target, resolve)?
+            InternalCanvas::from_msaa(gfx, self.clear, &self.target, resolve)?
         } else {
-            InternalCanvas::from_image(gfx, self.load_op, &self.target)?
+            InternalCanvas::from_image(gfx, self.clear, &self.target)?
         };
 
         let mut state = self.state.clone();
 
         // apply initial state
         canvas.set_shader(state.shader.clone());
-        if let Some((bind_group, layout)) = &state.params {
-            canvas.set_shader_params(bind_group.clone(), layout.clone());
+        if let Some((bind_group, layout, offset)) = &state.params {
+            canvas.set_shader_params(bind_group.clone(), layout.clone(), *offset);
         }
 
         canvas.set_text_shader(state.text_shader.clone());
-        if let Some((bind_group, layout)) = &state.text_params {
-            canvas.set_text_shader_params(bind_group.clone(), layout.clone());
+        if let Some((bind_group, layout, offset)) = &state.text_params {
+            canvas.set_text_shader_params(bind_group.clone(), layout.clone(), *offset);
         }
 
         canvas.set_sampler(state.sampler);
         canvas.set_blend_mode(state.blend_mode);
         canvas.set_projection(state.projection);
+
+        if state.scissor_rect.2 > 0 && state.scissor_rect.3 > 0 {
+            canvas.set_scissor_rect(state.scissor_rect);
+        }
 
         for draws in self.draws.values() {
             for draw in draws {
@@ -367,8 +456,8 @@ impl Canvas {
                 }
 
                 if draw.state.params != state.params {
-                    if let Some((bind_group, layout)) = &draw.state.params {
-                        canvas.set_shader_params(bind_group.clone(), layout.clone());
+                    if let Some((bind_group, layout, offset)) = &draw.state.params {
+                        canvas.set_shader_params(bind_group.clone(), layout.clone(), *offset);
                     }
                 }
 
@@ -377,8 +466,8 @@ impl Canvas {
                 }
 
                 if draw.state.text_params != state.text_params {
-                    if let Some((bind_group, layout)) = &draw.state.text_params {
-                        canvas.set_text_shader_params(bind_group.clone(), layout.clone());
+                    if let Some((bind_group, layout, offset)) = &draw.state.text_params {
+                        canvas.set_text_shader_params(bind_group.clone(), layout.clone(), *offset);
                     }
                 }
 
@@ -398,13 +487,21 @@ impl Canvas {
                     canvas.set_projection(draw.state.projection);
                 }
 
+                if draw.state.scissor_rect != state.scissor_rect {
+                    canvas.set_scissor_rect(draw.state.scissor_rect);
+                }
+
                 state = draw.state.clone();
 
                 match &draw.draw {
-                    Draw::Mesh { mesh, image } => canvas.draw_mesh(mesh, image, draw.param),
-                    Draw::MeshInstances { mesh, instances } => {
-                        canvas.draw_mesh_instances(mesh, instances, draw.param)?
+                    Draw::Mesh { mesh, image, scale } => {
+                        canvas.draw_mesh(mesh, image, draw.param, *scale)
                     }
+                    Draw::MeshInstances {
+                        mesh,
+                        instances,
+                        scale,
+                    } => canvas.draw_mesh_instances(mesh, instances, draw.param, *scale)?,
                     Draw::BoundedText { text } => canvas.draw_bounded_text(text, draw.param)?,
                 }
             }
@@ -416,41 +513,17 @@ impl Canvas {
     }
 }
 
-/// Describes the image load operation when starting a new canvas.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum CanvasLoadOp {
-    /// Keep the existing contents of the image.
-    DontClear,
-    /// Clear the image contents to a solid color.
-    Clear(Color),
-}
-
-impl From<Option<Color>> for CanvasLoadOp {
-    fn from(color: Option<Color>) -> Self {
-        match color {
-            Some(color) => CanvasLoadOp::Clear(color),
-            None => CanvasLoadOp::DontClear,
-        }
-    }
-}
-
-impl From<Color> for CanvasLoadOp {
-    #[inline]
-    fn from(color: Color) -> Self {
-        CanvasLoadOp::Clear(color)
-    }
-}
-
 #[derive(Debug, Clone)]
 struct DrawState {
     shader: Shader,
-    params: Option<(ArcBindGroup, ArcBindGroupLayout)>,
+    params: Option<(ArcBindGroup, ArcBindGroupLayout, u32)>,
     text_shader: Shader,
-    text_params: Option<(ArcBindGroup, ArcBindGroupLayout)>,
+    text_params: Option<(ArcBindGroup, ArcBindGroupLayout, u32)>,
     sampler: Sampler,
     blend_mode: BlendMode,
     premul_text: bool,
     projection: mint::ColumnMatrix4<f32>,
+    scissor_rect: (u32, u32, u32, u32),
 }
 
 #[derive(Debug)]
@@ -458,10 +531,12 @@ pub(crate) enum Draw {
     Mesh {
         mesh: Mesh,
         image: Image,
+        scale: bool,
     },
     MeshInstances {
         mesh: Mesh,
         instances: InstanceArrayView,
+        scale: bool,
     },
     BoundedText {
         text: Text,
@@ -478,32 +553,31 @@ struct DrawCommand {
 
 #[derive(Debug)]
 pub(crate) struct DefaultResources {
-    pub shader: Shader,
-    pub text_shader: Shader,
     pub mesh: Mesh,
     pub image: Image,
 }
 
 impl DefaultResources {
     fn new(gfx: &GraphicsContext) -> Self {
-        let shader = Shader {
-            fragment: gfx.draw_shader.clone(),
-            fs_entry: "fs_main".into(),
-        };
-
-        let text_shader = Shader {
-            fragment: gfx.text_shader.clone(),
-            fs_entry: "fs_main".into(),
-        };
-
         let mesh = gfx.rect_mesh.clone();
         let image = gfx.white_image.clone();
 
-        DefaultResources {
-            shader,
-            text_shader,
-            mesh,
-            image,
-        }
+        DefaultResources { mesh, image }
+    }
+}
+
+/// The default shader.
+pub fn default_shader() -> Shader {
+    Shader {
+        fs_module: None,
+        vs_module: None,
+    }
+}
+
+/// The default text shader.
+pub fn default_text_shader() -> Shader {
+    Shader {
+        fs_module: None,
+        vs_module: None,
     }
 }

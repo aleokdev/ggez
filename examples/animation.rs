@@ -6,11 +6,11 @@
 extern crate num_derive;
 
 use ggez::event;
+use ggez::glam::*;
 use ggez::graphics::{self, Color};
-use ggez::input::keyboard::KeyCode;
+use ggez::input::keyboard::{KeyCode, KeyInput};
 use ggez::mint::Point2;
 use ggez::{Context, GameResult};
-use glam::*;
 use keyframe::{ease, functions::*, keyframes, AnimationSequence, EasingFunction};
 use keyframe_derive::CanTween;
 use num_traits::{FromPrimitive, ToPrimitive};
@@ -226,7 +226,7 @@ fn player_sequence(
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
         let ball = graphics::Mesh::new_circle(
-            &ctx.gfx,
+            ctx,
             graphics::DrawMode::fill(),
             Vec2::new(0.0, 0.0),
             60.0,
@@ -234,7 +234,7 @@ impl MainState {
             Color::WHITE,
         )?;
 
-        let img = graphics::Image::from_path(&ctx.fs, &ctx.gfx, "/player_sheet.png", true)?;
+        let img = graphics::Image::from_path(ctx, "/player_sheet.png")?;
         let s = MainState {
             ball,
             spritesheet: img,
@@ -266,7 +266,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        let mut canvas = graphics::Canvas::from_frame(&ctx.gfx, Color::from([0.1, 0.2, 0.3, 1.0]));
+        let mut canvas = graphics::Canvas::from_frame(ctx, Color::from([0.1, 0.2, 0.3, 1.0]));
 
         canvas.set_sampler(graphics::Sampler::nearest_clamp()); // because pixel art
 
@@ -298,47 +298,41 @@ impl event::EventHandler<ggez::GameError> for MainState {
             &self.spritesheet,
             graphics::DrawParam::new()
                 .src(current_frame_src)
-                .scale([scale * current_frame_src.w, scale * current_frame_src.h])
+                .scale([scale, scale])
                 .dest([470.0, 460.0])
                 .offset([0.5, 1.0]),
         );
 
-        canvas.finish(&mut ctx.gfx)?;
+        canvas.finish(ctx)?;
 
         Ok(())
     }
 
-    fn key_down_event(
-        &mut self,
-        _ctx: &mut Context,
-        keycode: ggez::input::keyboard::KeyCode,
-        _keymods: ggez::input::keyboard::KeyMods,
-        _repeat: bool,
-    ) -> GameResult {
+    fn key_down_event(&mut self, _ctx: &mut Context, input: KeyInput, _repeat: bool) -> GameResult {
         const DELTA: f32 = 0.2;
-        match keycode {
-            KeyCode::Up | KeyCode::Down => {
+        match input.keycode {
+            Some(KeyCode::Up | KeyCode::Down) => {
                 // easing change
                 let new_easing_enum = new_enum_after_key(
                     &self.easing_enum,
                     &EasingEnum::EaseInOut3Point,
-                    &KeyCode::Down,
-                    &KeyCode::Up,
-                    &keycode,
+                    KeyCode::Down,
+                    KeyCode::Up,
+                    input.keycode.unwrap(),
                 );
 
                 if self.easing_enum != new_easing_enum {
                     self.easing_enum = new_easing_enum;
                 }
             }
-            KeyCode::Left | KeyCode::Right => {
+            Some(KeyCode::Left | KeyCode::Right) => {
                 // animation change
                 let new_animation_type = new_enum_after_key(
                     &self.animation_type,
                     &AnimationType::Crawl,
-                    &KeyCode::Left,
-                    &KeyCode::Right,
-                    &keycode,
+                    KeyCode::Left,
+                    KeyCode::Right,
+                    input.keycode.unwrap(),
                 );
 
                 if self.animation_type != new_animation_type {
@@ -346,10 +340,10 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 }
             }
             // duration change
-            KeyCode::W => {
+            Some(KeyCode::W) => {
                 self.duration += DELTA;
             }
-            KeyCode::S => {
+            Some(KeyCode::S) => {
                 if self.duration - DELTA > 0.1 {
                     self.duration -= DELTA;
                 }
@@ -367,14 +361,14 @@ impl event::EventHandler<ggez::GameError> for MainState {
 fn new_enum_after_key<E: ToPrimitive + FromPrimitive>(
     old_enum: &E,
     max_enum: &E,
-    dec_key: &KeyCode,
-    inc_key: &KeyCode,
-    key: &KeyCode,
+    dec_key: KeyCode,
+    inc_key: KeyCode,
+    key: KeyCode,
 ) -> E {
     let mut new_val = ToPrimitive::to_i32(old_enum).unwrap();
     new_val += match key {
-        _ if *key == *dec_key => -1,
-        _ if *key == *inc_key => 1,
+        _ if key == dec_key => -1,
+        _ if key == inc_key => 1,
         _ => 0,
     };
 

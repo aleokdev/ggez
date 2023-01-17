@@ -4,17 +4,20 @@
 //! Prints instructions to the console.
 use std::convert::TryFrom;
 
-use ggez::event::{self, KeyCode, KeyMods};
+use ggez::conf;
+use ggez::event;
+use ggez::graphics::Rect;
 use ggez::graphics::{self, Color, DrawMode, DrawParam};
-use ggez::{conf, graphics::Rect};
+use ggez::input::keyboard::KeyCode;
 use ggez::{Context, GameResult};
 
 use argh::FromArgs;
 
+use ggez::input::keyboard::KeyInput;
 use std::env;
 use std::path;
 
-type Point2 = glam::Vec2;
+type Point2 = ggez::glam::Vec2;
 
 struct WindowSettings {
     toggle_fullscreen: bool,
@@ -35,7 +38,7 @@ impl MainState {
         let s = MainState {
             angle: 0.0,
             zoom: 1.0,
-            image: graphics::Image::from_path(&ctx.fs, &ctx.gfx, "/tile.png", true)?,
+            image: graphics::Image::from_path(ctx, "/tile.png")?,
             window_settings: WindowSettings {
                 toggle_fullscreen: false,
                 is_fullscreen: false,
@@ -72,7 +75,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        let mut canvas = graphics::Canvas::from_frame(&ctx.gfx, Color::BLACK);
+        let mut canvas = graphics::Canvas::from_frame(ctx, Color::BLACK);
         canvas.set_screen_coordinates(self.screen_coords);
 
         canvas.draw(
@@ -84,7 +87,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
 
         let rotation = ctx.time.ticks() % 1000;
         let circle = graphics::Mesh::new_circle(
-            &ctx.gfx,
+            ctx,
             DrawMode::stroke(3.0),
             Point2::new(0.0, 0.0),
             100.0,
@@ -125,10 +128,10 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 )?;
             }
         }
-        let mesh = graphics::Mesh::from_data(&ctx.gfx, mb.build());
+        let mesh = graphics::Mesh::from_data(ctx, mb.build());
         canvas.draw(&mesh, ggez::mint::Point2 { x: 0.0, y: 0.0 });
 
-        canvas.finish(&mut ctx.gfx)?;
+        canvas.finish(ctx)?;
 
         Ok(())
     }
@@ -144,34 +147,27 @@ impl event::EventHandler<ggez::GameError> for MainState {
         Ok(())
     }
 
-    fn key_up_event(
-        &mut self,
-        ctx: &mut Context,
-        keycode: KeyCode,
-        _keymod: KeyMods,
-    ) -> GameResult {
-        match keycode {
-            KeyCode::F => {
+    fn key_up_event(&mut self, ctx: &mut Context, input: KeyInput) -> GameResult {
+        match input.keycode {
+            Some(KeyCode::F) => {
                 self.window_settings.toggle_fullscreen = true;
                 self.window_settings.is_fullscreen = !self.window_settings.is_fullscreen;
             }
-            KeyCode::Up => {
+            Some(KeyCode::Up) => {
                 self.zoom += 0.1;
                 println!("Zoom is now {}", self.zoom);
                 let (w, h) = ctx.gfx.drawable_size();
-                let new_rect =
-                    graphics::Rect::new(0.0, 0.0, w as f32 * self.zoom, h as f32 * self.zoom);
+                let new_rect = graphics::Rect::new(0.0, 0.0, w * self.zoom, h * self.zoom);
                 self.screen_coords = new_rect;
             }
-            KeyCode::Down => {
+            Some(KeyCode::Down) => {
                 self.zoom -= 0.1;
                 println!("Zoom is now {}", self.zoom);
                 let (w, h) = ctx.gfx.drawable_size();
-                let new_rect =
-                    graphics::Rect::new(0.0, 0.0, w as f32 * self.zoom, h as f32 * self.zoom);
+                let new_rect = graphics::Rect::new(0.0, 0.0, w * self.zoom, h * self.zoom);
                 self.screen_coords = new_rect;
             }
-            KeyCode::Space => {
+            Some(KeyCode::Space) => {
                 self.window_settings.resize_projection = !self.window_settings.resize_projection;
                 println!(
                     "Resizing the projection on window resize is now: {}",
@@ -186,12 +182,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
     fn resize_event(&mut self, _ctx: &mut Context, width: f32, height: f32) -> GameResult {
         println!("Resized screen to {}, {}", width, height);
         if self.window_settings.resize_projection {
-            let new_rect = graphics::Rect::new(
-                0.0,
-                0.0,
-                width as f32 * self.zoom,
-                height as f32 * self.zoom,
-            );
+            let new_rect = graphics::Rect::new(0.0, 0.0, width * self.zoom, height * self.zoom);
             self.screen_coords = new_rect;
         }
         Ok(())

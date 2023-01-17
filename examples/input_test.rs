@@ -1,10 +1,11 @@
 //! Example that just prints out all the input events.
 
 use ggez::conf;
-use ggez::event::{self, Axis, Button, GamepadId, KeyCode, KeyMods, MouseButton};
+use ggez::event::{self, Axis, Button, GamepadId, MouseButton};
+use ggez::glam::*;
 use ggez::graphics::{self, Color, DrawMode};
+use ggez::input::keyboard::{KeyCode, KeyInput};
 use ggez::{Context, GameResult};
-use glam::*;
 
 struct MainState {
     pos_x: f32,
@@ -41,9 +42,9 @@ impl event::EventHandler<ggez::GameError> for MainState {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        let mut canvas = graphics::Canvas::from_frame(&ctx.gfx, Color::from([0.1, 0.2, 0.3, 1.0]));
+        let mut canvas = graphics::Canvas::from_frame(ctx, Color::from([0.1, 0.2, 0.3, 1.0]));
         let rectangle = graphics::Mesh::new_rectangle(
-            &ctx.gfx,
+            ctx,
             DrawMode::fill(),
             graphics::Rect {
                 x: self.pos_x,
@@ -53,8 +54,8 @@ impl event::EventHandler<ggez::GameError> for MainState {
             },
             Color::WHITE,
         )?;
-        canvas.draw(&rectangle, glam::Vec2::new(0.0, 0.0));
-        canvas.finish(&mut ctx.gfx)?;
+        canvas.draw(&rectangle, Vec2::new(0.0, 0.0));
+        canvas.finish(ctx)?;
         Ok(())
     }
 
@@ -119,27 +120,19 @@ impl event::EventHandler<ggez::GameError> for MainState {
         Ok(())
     }
 
-    fn key_down_event(
-        &mut self,
-        _ctx: &mut Context,
-        keycode: KeyCode,
-        keymod: KeyMods,
-        repeat: bool,
-    ) -> GameResult {
+    fn key_down_event(&mut self, _ctx: &mut Context, input: KeyInput, repeat: bool) -> GameResult {
         println!(
-            "Key pressed: {:?}, modifier {:?}, repeat: {}",
-            keycode, keymod, repeat
+            "Key pressed: scancode {}, keycode {:?}, modifier {:?}, repeat: {}",
+            input.scancode, input.keycode, input.mods, repeat
         );
         Ok(())
     }
 
-    fn key_up_event(
-        &mut self,
-        _ctx: &mut Context,
-        keycode: KeyCode,
-        keymod: KeyMods,
-    ) -> GameResult {
-        println!("Key released: {:?}, modifier {:?}", keycode, keymod);
+    fn key_up_event(&mut self, _ctx: &mut Context, input: KeyInput) -> GameResult {
+        println!(
+            "Key released: scancode {}, keycode {:?}, modifier {:?}",
+            input.scancode, input.keycode, input.mods
+        );
         Ok(())
     }
 
@@ -202,7 +195,7 @@ pub fn main() -> GameResult {
 
     // remove the comment to see how physical mouse coordinates can differ
     // from logical game coordinates when the screen coordinate system changes
-    // graphics::set_screen_coordinates(&mut ctx, Rect::new(20., 50., 2000., 1000.));
+    // canvas.set_screen_coordinates(Rect::new(20.0, 50.0, 2000.0, 1000.0));
 
     // alternatively, resizing the window also leads to screen coordinates
     // and physical window size being out of sync

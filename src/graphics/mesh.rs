@@ -3,16 +3,14 @@ use super::{
     Drawable, LinearColor, Rect, WgpuContext,
 };
 use crate::GameResult;
-use lyon::{
-    math::Point as LPoint,
-    path::{traits::PathBuilder, Polygon},
-    tessellation as tess,
-};
+use crate::{context::Has, GameError};
+use lyon::path::traits::PathBuilder;
+use lyon::{math::Point as LPoint, path::Polygon, tessellation as tess};
 use wgpu::util::DeviceExt;
 
 /// Vertex format uploaded to vertex buffers.
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, bytemuck::Zeroable, bytemuck::Pod)]
 pub struct Vertex {
     /// `vec2` position.
     pub position: [f32; 2],
@@ -50,7 +48,7 @@ impl Vertex {
     }
 }
 
-/// Mesh data stored on the GPU as a vertex and index buffer.
+/// Mesh data stored on the GPU as a vertex and index buffer. Cheap to clone.
 #[derive(Debug, Clone)]
 pub struct Mesh {
     pub(crate) verts: ArcBuffer,
@@ -61,8 +59,9 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    /// Create a new mesh from [MeshData].
-    pub fn from_data(gfx: &GraphicsContext, raw: MeshData) -> Self {
+    /// Create a new mesh from [`MeshData`].
+    pub fn from_data(gfx: &impl Has<GraphicsContext>, raw: MeshData) -> Self {
+        let gfx = gfx.retrieve();
         Self::from_data_wgpu(&gfx.wgpu, raw)
     }
 
@@ -91,7 +90,7 @@ impl Mesh {
 
     /// Create a new mesh for a line of one or more connected segments.
     pub fn new_line(
-        gfx: &GraphicsContext,
+        gfx: &impl Has<GraphicsContext>,
         points: &[impl Into<mint::Point2<f32>> + Clone],
         width: f32,
         color: Color,
@@ -106,7 +105,7 @@ impl Mesh {
 
     /// Create a new mesh for a circle.
     pub fn new_circle(
-        gfx: &GraphicsContext,
+        gfx: &impl Has<GraphicsContext>,
         mode: DrawMode,
         point: impl Into<mint::Point2<f32>>,
         radius: f32,
@@ -123,7 +122,7 @@ impl Mesh {
 
     /// Create a new mesh for an ellipse.
     pub fn new_ellipse(
-        gfx: &GraphicsContext,
+        gfx: &impl Has<GraphicsContext>,
         mode: DrawMode,
         point: impl Into<mint::Point2<f32>>,
         radius1: f32,
@@ -141,7 +140,7 @@ impl Mesh {
 
     /// Create a new mesh for a series of connected lines.
     pub fn new_polyline(
-        gfx: &GraphicsContext,
+        gfx: &impl Has<GraphicsContext>,
         mode: DrawMode,
         points: &[impl Into<mint::Point2<f32>> + Clone],
         color: Color,
@@ -156,7 +155,7 @@ impl Mesh {
     /// The points given must be in clockwise order,
     /// otherwise at best the polygon will not draw.
     pub fn new_polygon(
-        gfx: &GraphicsContext,
+        gfx: &impl Has<GraphicsContext>,
         mode: DrawMode,
         points: &[impl Into<mint::Point2<f32>> + Clone],
         color: Color,
@@ -169,7 +168,7 @@ impl Mesh {
 
     /// Create a new mesh for a rectangle.
     pub fn new_rectangle(
-        gfx: &GraphicsContext,
+        gfx: &impl Has<GraphicsContext>,
         mode: DrawMode,
         bounds: Rect,
         color: Color,
@@ -182,7 +181,7 @@ impl Mesh {
 
     /// Create a new mesh for a rounded rectangle.
     pub fn new_rounded_rectangle(
-        gfx: &GraphicsContext,
+        gfx: &impl Has<GraphicsContext>,
         mode: DrawMode,
         bounds: Rect,
         radius: f32,
@@ -198,7 +197,7 @@ impl Mesh {
 
     /// Create a new `Mesh` from a raw list of triangle points.
     pub fn from_triangles(
-        gfx: &GraphicsContext,
+        gfx: &impl Has<GraphicsContext>,
         triangles: &[impl Into<mint::Point2<f32>> + Clone],
         color: Color,
     ) -> GameResult<Self> {
@@ -232,12 +231,7 @@ impl Mesh {
             wgpu.device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: None,
-                    contents: unsafe {
-                        std::slice::from_raw_parts(
-                            vertices.as_ptr() as *const u8,
-                            std::mem::size_of::<Vertex>() * vertices.len(),
-                        )
-                    },
+                    contents: bytemuck::cast_slice(vertices),
                     usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 }),
         )
@@ -249,9 +243,7 @@ impl Mesh {
             wgpu.device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: None,
-                    contents: unsafe {
-                        std::slice::from_raw_parts(indices.as_ptr() as *const u8, 4 * indices.len())
-                    },
+                    contents: bytemuck::cast_slice(indices),
                     usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
                 }),
         )
@@ -259,17 +251,18 @@ impl Mesh {
 }
 
 impl Drawable for Mesh {
-    fn draw(&self, canvas: &mut Canvas, param: DrawParam) {
+    fn draw(&self, canvas: &mut Canvas, param: impl Into<DrawParam>) {
         canvas.push_draw(
             Draw::Mesh {
                 mesh: self.clone(),
                 image: canvas.default_resources().image.clone(),
+                scale: false,
             },
-            param,
+            param.into(),
         );
     }
 
-    fn dimensions(&self, _gfx: &mut GraphicsContext) -> Option<Rect> {
+    fn dimensions(&self, _gfx: &impl Has<GraphicsContext>) -> Option<Rect> {
         Some(self.bounds)
     }
 }
@@ -278,19 +271,22 @@ impl Drawable for Mesh {
 ///
 /// Draw like any other mesh;
 /// ```rust
+/// # use ggez::graphics::*;
+/// # fn f(mut canvas: Canvas) {
 /// // draw a 50x70 red rectangle at (200, 250)
-/// canvas.draw(graphics::Quad, graphics::DrawParam::default().color(Color::RED).scale([50., 70.]).dest([200., 250.]));
+/// canvas.draw(&Quad, DrawParam::default().color(Color::RED).scale([50., 70.]).dest([200., 250.]));
+/// # }
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Quad;
 
 // draw quad
 impl Drawable for Quad {
-    fn draw(&self, canvas: &mut Canvas, param: DrawParam) {
-        canvas.draw(&canvas.default_resources().mesh.clone(), param);
+    fn draw(&self, canvas: &mut Canvas, param: impl Into<DrawParam>) {
+        canvas.default_resources().mesh.clone().draw(canvas, param);
     }
 
-    fn dimensions(&self, _gfx: &mut GraphicsContext) -> Option<Rect> {
+    fn dimensions(&self, _gfx: &impl Has<GraphicsContext>) -> Option<Rect> {
         Some(Rect::one())
     }
 }
@@ -319,7 +315,7 @@ impl Default for MeshBuilder {
 }
 
 impl MeshBuilder {
-    /// Create a new [MeshBuilder].
+    /// Create a new [`MeshBuilder`].
     pub fn new() -> Self {
         Self::default()
     }
@@ -359,21 +355,21 @@ impl MeshBuilder {
             match mode {
                 DrawMode::Fill(fill_options) => {
                     let mut tessellator = tess::FillTessellator::new();
-                    let _ = tessellator.tessellate_circle(
+                    tessellator.tessellate_circle(
                         tess::math::point(point.x, point.y),
                         radius,
                         &fill_options.with_tolerance(tolerance),
                         &mut tess::BuffersBuilder::new(buffers, vb),
-                    );
+                    )?;
                 }
                 DrawMode::Stroke(options) => {
                     let mut tessellator = tess::StrokeTessellator::new();
-                    let _ = tessellator.tessellate_circle(
+                    tessellator.tessellate_circle(
                         tess::math::point(point.x, point.y),
                         radius,
                         &options.with_tolerance(tolerance),
                         &mut tess::BuffersBuilder::new(buffers, vb),
-                    );
+                    )?;
                 }
             };
         }
@@ -409,26 +405,26 @@ impl MeshBuilder {
                 DrawMode::Fill(fill_options) => {
                     let builder = &mut tess::BuffersBuilder::new(buffers, vb);
                     let mut tessellator = tess::FillTessellator::new();
-                    let _ = tessellator.tessellate_ellipse(
+                    tessellator.tessellate_ellipse(
                         tess::math::point(point.x, point.y),
                         tess::math::vector(radius1, radius2),
                         tess::math::Angle { radians: 0.0 },
                         tess::path::Winding::Positive,
                         &fill_options.with_tolerance(tolerance),
                         builder,
-                    );
+                    )?;
                 }
                 DrawMode::Stroke(options) => {
                     let builder = &mut tess::BuffersBuilder::new(buffers, vb);
                     let mut tessellator = tess::StrokeTessellator::new();
-                    let _ = tessellator.tessellate_ellipse(
+                    tessellator.tessellate_ellipse(
                         tess::math::point(point.x, point.y),
                         tess::math::vector(radius1, radius2),
                         tess::math::Angle { radians: 0.0 },
                         tess::path::Winding::Positive,
                         &options.with_tolerance(tolerance),
                         builder,
-                    );
+                    )?;
                 }
             };
         }
@@ -525,12 +521,12 @@ impl MeshBuilder {
                 DrawMode::Fill(options) => {
                     let builder = &mut tess::BuffersBuilder::new(buffers, vb);
                     let tessellator = &mut tess::FillTessellator::new();
-                    let _ = tessellator.tessellate_polygon(polygon, &options, builder)?;
+                    tessellator.tessellate_polygon(polygon, &options, builder)?;
                 }
                 DrawMode::Stroke(options) => {
                     let builder = &mut tess::BuffersBuilder::new(buffers, vb);
                     let tessellator = &mut tess::StrokeTessellator::new();
-                    let _ = tessellator.tessellate_polygon(polygon, &options, builder)?;
+                    tessellator.tessellate_polygon(polygon, &options, builder)?;
                 }
             };
         }
@@ -546,7 +542,10 @@ impl MeshBuilder {
     ) -> GameResult<&mut Self> {
         {
             let buffers = &mut self.buffer;
-            let rect = tess::math::rect(bounds.x, bounds.y, bounds.w, bounds.h);
+            let rect = tess::math::Box2D::from_origin_and_size(
+                tess::math::point(bounds.x, bounds.y),
+                tess::math::size(bounds.w, bounds.h),
+            );
             let vb = VertexBuilder {
                 color: LinearColor::from(color),
             };
@@ -554,12 +553,12 @@ impl MeshBuilder {
                 DrawMode::Fill(fill_options) => {
                     let builder = &mut tess::BuffersBuilder::new(buffers, vb);
                     let mut tessellator = tess::FillTessellator::new();
-                    let _ = tessellator.tessellate_rectangle(&rect, &fill_options, builder);
+                    tessellator.tessellate_rectangle(&rect, &fill_options, builder)?;
                 }
                 DrawMode::Stroke(options) => {
                     let builder = &mut tess::BuffersBuilder::new(buffers, vb);
                     let mut tessellator = tess::StrokeTessellator::new();
-                    let _ = tessellator.tessellate_rectangle(&rect, &options, builder);
+                    tessellator.tessellate_rectangle(&rect, &options, builder)?;
                 }
             };
         }
@@ -576,7 +575,10 @@ impl MeshBuilder {
     ) -> GameResult<&mut Self> {
         {
             let buffers = &mut self.buffer;
-            let rect = tess::math::rect(bounds.x, bounds.y, bounds.w, bounds.h);
+            let rect = tess::math::Box2D::from_origin_and_size(
+                tess::math::point(bounds.x, bounds.y),
+                tess::math::size(bounds.w, bounds.h),
+            );
             let radii = tess::path::builder::BorderRadii::new(radius);
             let vb = VertexBuilder {
                 color: LinearColor::from(color),
@@ -589,12 +591,12 @@ impl MeshBuilder {
                 DrawMode::Fill(fill_options) => {
                     let builder = &mut tess::BuffersBuilder::new(buffers, vb);
                     let mut tessellator = tess::FillTessellator::new();
-                    let _ = tessellator.tessellate_path(&path, &fill_options, builder);
+                    tessellator.tessellate_path(&path, &fill_options, builder)?;
                 }
                 DrawMode::Stroke(options) => {
                     let builder = &mut tess::BuffersBuilder::new(buffers, vb);
                     let mut tessellator = tess::StrokeTessellator::new();
-                    let _ = tessellator.tessellate_path(&path, &options, builder);
+                    tessellator.tessellate_path(&path, &options, builder)?;
                 }
             };
         }
@@ -651,7 +653,7 @@ impl MeshBuilder {
         Ok(self)
     }
 
-    /// Takes the accumulated geometry and return it as [MeshData].
+    /// Takes the accumulated geometry and return it as [`MeshData`].
     pub fn build(&self) -> MeshData {
         MeshData {
             vertices: &self.buffer.vertices,

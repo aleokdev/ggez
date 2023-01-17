@@ -7,8 +7,11 @@
 //! [![license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/ggez/ggez/blob/master/LICENSE)
 //! [![Crates.io](https://img.shields.io/crates/v/ggez.svg)](https://crates.io/crates/ggez)
 //! [![Crates.io](https://img.shields.io/crates/d/ggez.svg)](https://crates.io/crates/ggez)
+//! [![Discord chat](https://img.shields.io/discord/1031224392174293002.svg?label=discord%20chat)](https://discord.gg/48VycPe2ZX)
 //!
 //! ggez is a Rust library to create a Good Game Easily.
+//!
+//! The current version is 0.8.1.
 //!
 //! More specifically, ggez is a lightweight cross-platform game framework
 //! for making 2D games with minimum friction.  It aims to implement an
@@ -58,7 +61,7 @@
 //! line to your `Cargo.toml` file:
 //!
 //! ```text
-//! ggez = "0.7"
+//! ggez = "0.8.1"
 //! ```
 //!
 //! ggez consists of three main parts: A `Context` object which
@@ -135,15 +138,15 @@
 //! }
 //!
 //! impl EventHandler for MyGame {
-//!    fn update(&mut self, _ctx: &mut Context) -> GameResult<()> {
+//!    fn update(&mut self, _ctx: &mut Context) -> GameResult {
 //!         // Update code here...
 //!         Ok(())
 //!     }
 //!
-//!     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
-//!         let mut canvas = graphics::Canvas::from_frame(&ctx.gfx, Color::WHITE);
+//!     fn draw(&mut self, ctx: &mut Context) -> GameResult {
+//!         let mut canvas = graphics::Canvas::from_frame(ctx, Color::WHITE);
 //!         // Draw code here...
-//!         canvas.finish(&mut ctx.gfx)
+//!         canvas.finish(ctx)
 //!     }
 //! }
 //! ```
@@ -169,7 +172,10 @@
 //!  If you still have problems or questions, feel free to ask!  Easiest ways are:
 //!
 //!  * Open an issue on [the Github issue tracker](https://github.com/ggez/ggez/issues)
-//!  * Say hi on the [unofficial Rust Discord server](http://bit.ly/rust-community) or the [Rust Gamedev server](https://discord.gg/yNtPTb2)
+//!  * Say hi on [our new Discord server](https://discord.gg/48VycPe2ZX)
+//!  * Or ask the wise people on the [unofficial Rust Discord server](http://bit.ly/rust-community), the [Rust Gamedev server](https://discord.gg/yNtPTb2) or the [good-web-game Discord server](https://discord.gg/jum3Fjek2A)
+//!
+//! License: MIT
 
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/ggez/ggez/master/docs/ggez-logo-maroon-logo-only.svg"
@@ -177,27 +183,20 @@
 #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
 #![deny(unused_results)]
-// This is not as strong a constraint as `#![forbid(unsafe_code)]` but is good enough.
-// It means the only place we use unsafe is then in the modules noted as allowing it.
 #![deny(unsafe_code)]
 #![warn(bare_trait_objects)]
 #![warn(missing_copy_implementations)]
 #![allow(clippy::needless_doctest_main)]
 
 #[macro_use]
-extern crate bitflags;
-#[macro_use]
 extern crate log;
-#[macro_use]
-extern crate serde_derive;
-#[macro_use]
-extern crate smart_default;
 
+pub extern crate glam;
 pub extern crate mint;
 
 pub mod audio;
 pub mod conf;
-mod context;
+pub mod context;
 pub mod error;
 pub mod event;
 pub mod filesystem;

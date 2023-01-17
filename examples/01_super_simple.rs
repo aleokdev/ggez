@@ -3,10 +3,10 @@
 
 use ggez::{
     event,
+    glam::*,
     graphics::{self, Color},
     Context, GameResult,
 };
-use glam::*;
 
 struct MainState {
     pos_x: f32,
@@ -16,7 +16,7 @@ struct MainState {
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
         let circle = graphics::Mesh::new_circle(
-            &ctx.gfx,
+            ctx,
             graphics::DrawMode::fill(),
             vec2(0., 0.),
             100.0,
@@ -35,14 +35,12 @@ impl event::EventHandler<ggez::GameError> for MainState {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        let mut canvas = graphics::Canvas::from_frame(
-            &ctx.gfx,
-            graphics::CanvasLoadOp::Clear([0.1, 0.2, 0.3, 1.0].into()),
-        );
+        let mut canvas =
+            graphics::Canvas::from_frame(ctx, graphics::Color::from([0.1, 0.2, 0.3, 1.0]));
 
         canvas.draw(&self.circle, Vec2::new(self.pos_x, 380.0));
 
-        canvas.finish(&mut ctx.gfx)?;
+        canvas.finish(ctx)?;
 
         Ok(())
     }

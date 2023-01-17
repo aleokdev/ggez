@@ -15,23 +15,28 @@ use std::time;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+use crate::context::Has;
+use crate::error::GameError;
 use crate::error::GameResult;
 use crate::filesystem::Filesystem;
+use crate::filesystem::InternalClone;
 
 /// A struct that contains all information for tracking sound info.
 ///
 /// You generally don't have to create this yourself, it will be part
 /// of your `Context` object.
 pub struct AudioContext {
+    fs: Filesystem,
     _stream: rodio::OutputStream,
     stream_handle: rodio::OutputStreamHandle,
 }
 
 impl AudioContext {
     /// Create new `AudioContext`.
-    pub fn new() -> GameResult<Self> {
+    pub fn new(fs: &Filesystem) -> GameResult<Self> {
         let (stream, stream_handle) = rodio::OutputStream::try_default()?;
         Ok(Self {
+            fs: InternalClone::clone(fs),
             _stream: stream,
             stream_handle,
         })
@@ -58,7 +63,8 @@ pub struct SoundData(Arc<[u8]>);
 
 impl SoundData {
     /// Load the file at the given path and create a new `SoundData` from it.
-    pub fn new<P: AsRef<path::Path>>(fs: &Filesystem, path: P) -> GameResult<Self> {
+    pub fn new<P: AsRef<path::Path>>(fs: &impl Has<Filesystem>, path: P) -> GameResult<Self> {
+        let fs = fs.retrieve();
         let path = path.as_ref();
         let file = &mut fs.open(path)?;
         SoundData::from_read(file)
@@ -118,7 +124,8 @@ impl AsRef<[u8]> for SoundData {
 /// it is implemented by both `Source` and `SpatialSource`.
 pub trait SoundSource {
     /// Plays the audio source; restarts the sound if currently playing
-    fn play(&mut self, audio: &AudioContext) -> GameResult {
+    fn play(&mut self, audio: &impl Has<AudioContext>) -> GameResult {
+        let audio = audio.retrieve();
         self.stop(audio)?;
         self.play_later()
     }
@@ -127,7 +134,7 @@ pub trait SoundSource {
     fn play_later(&self) -> GameResult;
 
     /// Play source "in the background"; cannot be stopped
-    fn play_detached(&mut self, audio: &AudioContext) -> GameResult;
+    fn play_detached(&mut self, audio: &impl Has<AudioContext>) -> GameResult;
 
     /// Sets the source to repeat playback infinitely on next [`play()`](#method.play)
     fn set_repeat(&mut self, repeat: bool);
@@ -159,7 +166,7 @@ pub trait SoundSource {
     fn resume(&self);
 
     /// Stops playback
-    fn stop(&mut self, audio: &AudioContext) -> GameResult;
+    fn stop(&mut self, audio: &impl Has<AudioContext>) -> GameResult;
 
     /// Returns whether or not the source is stopped
     /// -- that is, has no more data to play.
@@ -275,18 +282,16 @@ pub struct Source {
 
 impl Source {
     /// Create a new `Source` from the given file.
-    pub fn new<P: AsRef<path::Path>>(
-        fs: &Filesystem,
-        audio: &AudioContext,
-        path: P,
-    ) -> GameResult<Self> {
+    pub fn new<P: AsRef<path::Path>>(ctxs: &impl Has<AudioContext>, path: P) -> GameResult<Self> {
+        let audio = ctxs.retrieve();
         let path = path.as_ref();
-        let data = SoundData::new(fs, path)?;
+        let data = SoundData::new(&audio.fs, path)?;
         Source::from_data(audio, data)
     }
 
     /// Creates a new `Source` using the given `SoundData` object.
-    pub fn from_data(audio: &AudioContext, data: SoundData) -> GameResult<Self> {
+    pub fn from_data(audio: &impl Has<AudioContext>, data: SoundData) -> GameResult<Self> {
+        let audio = audio.retrieve();
         data.try_decode()?;
         let sink = rodio::Sink::try_new(audio.device())?;
         let cursor = io::Cursor::new(data);
@@ -334,7 +339,8 @@ impl SoundSource for Source {
         Ok(())
     }
 
-    fn play_detached(&mut self, audio: &AudioContext) -> GameResult {
+    fn play_detached(&mut self, audio: &impl Has<AudioContext>) -> GameResult {
+        let audio = audio.retrieve();
         self.stop(audio)?;
         self.play_later()?;
 
@@ -367,7 +373,8 @@ impl SoundSource for Source {
         self.sink.play()
     }
 
-    fn stop(&mut self, audio: &AudioContext) -> GameResult {
+    fn stop(&mut self, audio: &impl Has<AudioContext>) -> GameResult {
+        let audio = audio.retrieve();
         // Sinks cannot be reused after calling `.stop()`. See
         // https://github.com/tomaka/rodio/issues/171 for information.
         // To stop the current sound we have to drop the old sink and
@@ -439,8 +446,8 @@ pub struct SpatialSource {
 impl SpatialSource {
     /// Create a new `SpatialSource` from the given file.
     pub fn new<P: AsRef<path::Path>>(
-        fs: &Filesystem,
-        audio: &AudioContext,
+        fs: &impl Has<Filesystem>,
+        audio: &impl Has<AudioContext>,
         path: P,
     ) -> GameResult<Self> {
         let path = path.as_ref();
@@ -449,7 +456,8 @@ impl SpatialSource {
     }
 
     /// Creates a new `SpatialSource` using the given `SoundData` object.
-    pub fn from_data(audio: &AudioContext, data: SoundData) -> GameResult<Self> {
+    pub fn from_data(audio: &impl Has<AudioContext>, data: SoundData) -> GameResult<Self> {
+        let audio = audio.retrieve();
         data.try_decode()?;
 
         let sink = rodio::SpatialSink::try_new(
@@ -509,7 +517,8 @@ impl SoundSource for SpatialSource {
         Ok(())
     }
 
-    fn play_detached(&mut self, audio: &AudioContext) -> GameResult {
+    fn play_detached(&mut self, audio: &impl Has<AudioContext>) -> GameResult {
+        let audio = audio.retrieve();
         self.stop(audio)?;
         self.play_later()?;
 
@@ -554,7 +563,8 @@ impl SoundSource for SpatialSource {
         self.sink.play()
     }
 
-    fn stop(&mut self, audio: &AudioContext) -> GameResult {
+    fn stop(&mut self, audio: &impl Has<AudioContext>) -> GameResult {
+        let audio = audio.retrieve();
         // Sinks cannot be reused after calling `.stop()`. See
         // https://github.com/tomaka/rodio/issues/171 for information.
         // To stop the current sound we have to drop the old sink and

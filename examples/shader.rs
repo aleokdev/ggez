@@ -1,7 +1,9 @@
 //! A very simple shader example.
 
+use crevice::std140::AsStd140;
+use ggez::event;
+use ggez::glam::Vec2;
 use ggez::graphics::{self, Color, DrawMode};
-use ggez::{event, graphics::AsStd140};
 use ggez::{Context, GameResult};
 use std::env;
 use std::path;
@@ -20,9 +22,10 @@ struct MainState {
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
         let dim = Dim { rate: 0.5 };
-        let shader =
-            graphics::Shader::from_wgsl(&ctx.gfx, include_str!("../resources/dimmer.wgsl"), "main");
-        let params = graphics::ShaderParams::new(&mut ctx.gfx, &dim, &[], &[]);
+        let shader = graphics::ShaderBuilder::new_wgsl()
+            .fragment_path("/dimmer.wgsl")
+            .build(&ctx.gfx)?;
+        let params = graphics::ShaderParamsBuilder::new(&dim).build(ctx);
         Ok(MainState {
             dim,
             shader,
@@ -38,43 +41,43 @@ impl event::EventHandler<ggez::GameError> for MainState {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        let mut canvas = graphics::Canvas::from_frame(&ctx.gfx, Color::from([0.1, 0.2, 0.3, 1.0]));
+        let mut canvas = graphics::Canvas::from_frame(ctx, Color::from([0.1, 0.2, 0.3, 1.0]));
 
         let circle = graphics::Mesh::new_circle(
-            &ctx.gfx,
+            ctx,
             DrawMode::fill(),
-            glam::Vec2::new(100.0, 300.0),
+            Vec2::new(100.0, 300.0),
             100.0,
             2.0,
             Color::WHITE,
         )?;
-        canvas.draw(&circle, glam::Vec2::new(0.0, 0.0));
+        canvas.draw(&circle, Vec2::new(0.0, 0.0));
 
-        self.params.set_uniforms(&ctx.gfx, &self.dim);
-        canvas.set_shader(self.shader.clone());
-        canvas.set_shader_params(self.params.clone());
+        self.params.set_uniforms(ctx, &self.dim);
+        canvas.set_shader(&self.shader);
+        canvas.set_shader_params(&self.params);
         let circle = graphics::Mesh::new_circle(
-            &ctx.gfx,
+            ctx,
             DrawMode::fill(),
-            glam::Vec2::new(400.0, 300.0),
+            Vec2::new(400.0, 300.0),
             100.0,
             2.0,
             Color::WHITE,
         )?;
-        canvas.draw(&circle, glam::Vec2::new(0.0, 0.0));
+        canvas.draw(&circle, Vec2::new(0.0, 0.0));
 
         canvas.set_default_shader();
         let circle = graphics::Mesh::new_circle(
-            &ctx.gfx,
+            ctx,
             DrawMode::fill(),
-            glam::Vec2::new(700.0, 300.0),
+            Vec2::new(700.0, 300.0),
             100.0,
             2.0,
             Color::WHITE,
         )?;
-        canvas.draw(&circle, glam::Vec2::new(0.0, 0.0));
+        canvas.draw(&circle, Vec2::new(0.0, 0.0));
 
-        canvas.finish(&mut ctx.gfx)
+        canvas.finish(ctx)
     }
 }
 

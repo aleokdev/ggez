@@ -5,13 +5,15 @@
 use ggez::audio;
 use ggez::audio::SoundSource;
 use ggez::conf;
-use ggez::event::{self, EventHandler, KeyCode, KeyMods};
+use ggez::event::{self, EventHandler};
+use ggez::glam::*;
 use ggez::graphics::{self, Color};
+use ggez::input::keyboard::KeyCode;
 use ggez::timer;
 use ggez::{Context, ContextBuilder, GameResult};
-use glam::*;
 use oorandom::Rand32;
 
+use ggez::input::keyboard::KeyInput;
 use std::env;
 use std::path;
 
@@ -244,12 +246,12 @@ struct Assets {
 
 impl Assets {
     fn new(ctx: &mut Context) -> GameResult<Assets> {
-        let player_image = graphics::Image::from_path(&ctx.fs, &ctx.gfx, "/player.png", true)?;
-        let shot_image = graphics::Image::from_path(&ctx.fs, &ctx.gfx, "/shot.png", true)?;
-        let rock_image = graphics::Image::from_path(&ctx.fs, &ctx.gfx, "/rock.png", true)?;
+        let player_image = graphics::Image::from_path(ctx, "/player.png")?;
+        let shot_image = graphics::Image::from_path(ctx, "/shot.png")?;
+        let rock_image = graphics::Image::from_path(ctx, "/rock.png")?;
 
-        let shot_sound = audio::Source::new(&ctx.fs, &ctx.audio, "/pew.ogg")?;
-        let hit_sound = audio::Source::new(&ctx.fs, &ctx.audio, "/boom.ogg")?;
+        let shot_sound = audio::Source::new(ctx, "/pew.ogg")?;
+        let hit_sound = audio::Source::new(ctx, "/boom.ogg")?;
 
         Ok(Assets {
             player_image,
@@ -335,7 +337,7 @@ impl MainState {
 
         let (width, height) = ctx.gfx.drawable_size();
         let screen =
-            graphics::ScreenImage::new(&ctx.gfx, graphics::ImageFormat::Rgba8UnormSrgb, 1., 1., 1);
+            graphics::ScreenImage::new(ctx, graphics::ImageFormat::Rgba8UnormSrgb, 1., 1., 1);
 
         let s = MainState {
             screen,
@@ -367,7 +369,7 @@ impl MainState {
 
         self.shots.push(shot);
 
-        self.assets.shot_sound.play(&ctx.audio)?;
+        self.assets.shot_sound.play(ctx)?;
 
         Ok(())
     }
@@ -390,7 +392,7 @@ impl MainState {
                     rock.life = 0.0;
                     self.score += 1;
 
-                    self.assets.hit_sound.play(&ctx.audio)?;
+                    self.assets.hit_sound.play(ctx)?;
                 }
             }
         }
@@ -430,7 +432,7 @@ fn draw_actor(
     let image = assets.actor_image(actor);
     let drawparams = graphics::DrawParam::new()
         .dest(pos)
-        .rotation(actor.facing as f32)
+        .rotation(actor.facing)
         .offset(Point2::new(0.5, 0.5));
     canvas.draw(image, drawparams);
 }
@@ -457,23 +459,19 @@ impl EventHandler for MainState {
             // Update the physics for all actors.
             // First the player...
             update_actor_position(&mut self.player, seconds);
-            wrap_actor_position(
-                &mut self.player,
-                self.screen_width as f32,
-                self.screen_height as f32,
-            );
+            wrap_actor_position(&mut self.player, self.screen_width, self.screen_height);
 
             // Then the shots...
             for act in &mut self.shots {
                 update_actor_position(act, seconds);
-                wrap_actor_position(act, self.screen_width as f32, self.screen_height as f32);
+                wrap_actor_position(act, self.screen_width, self.screen_height);
                 handle_timed_life(act, seconds);
             }
 
             // And finally the rocks.
             for act in &mut self.rocks {
                 update_actor_position(act, seconds);
-                wrap_actor_position(act, self.screen_width as f32, self.screen_height as f32);
+                wrap_actor_position(act, self.screen_width, self.screen_height);
             }
 
             // Handle the results of things moving:
@@ -491,7 +489,7 @@ impl EventHandler for MainState {
             // but for now we just quit.
             if self.player.life <= 0.0 {
                 println!("Game over!");
-                let _ = event::quit(ctx);
+                ctx.request_quit();
             }
         }
 
@@ -501,8 +499,7 @@ impl EventHandler for MainState {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         // Our drawing is quite simple.
         // Just clear the screen...
-        let mut canvas =
-            graphics::Canvas::from_screen_image(&ctx.gfx, &mut self.screen, Color::BLACK);
+        let mut canvas = graphics::Canvas::from_screen_image(ctx, &mut self.screen, Color::BLACK);
 
         // Loop over all objects drawing them...
         {
@@ -538,8 +535,8 @@ impl EventHandler for MainState {
             graphics::DrawParam::from(score_dest).color(Color::WHITE),
         );
 
-        canvas.finish(&mut ctx.gfx)?;
-        ctx.gfx.present(&self.screen.image(&ctx.gfx))?;
+        canvas.finish(ctx)?;
+        ctx.gfx.present(&self.screen.image(ctx))?;
 
         // And yield the timeslice
         // This tells the OS that we're done using the CPU but it should
@@ -556,50 +553,44 @@ impl EventHandler for MainState {
     fn key_down_event(
         &mut self,
         ctx: &mut Context,
-        keycode: KeyCode,
-        _keymod: KeyMods,
-        _repeat: bool,
+        input: KeyInput,
+        _repeated: bool,
     ) -> GameResult {
-        match keycode {
-            KeyCode::Up => {
+        match input.keycode {
+            Some(KeyCode::Up) => {
                 self.input.yaxis = 1.0;
             }
-            KeyCode::Left => {
+            Some(KeyCode::Left) => {
                 self.input.xaxis = -1.0;
             }
-            KeyCode::Right => {
+            Some(KeyCode::Right) => {
                 self.input.xaxis = 1.0;
             }
-            KeyCode::Space => {
+            Some(KeyCode::Space) => {
                 self.input.fire = true;
             }
-            KeyCode::P => {
-                self.screen.image(&ctx.gfx).encode(
+            Some(KeyCode::P) => {
+                self.screen.image(ctx).encode(
                     ctx,
                     graphics::ImageEncodingFormat::Png,
                     "/screenshot.png",
                 )?;
             }
-            KeyCode::Escape => event::quit(ctx),
+            Some(KeyCode::Escape) => ctx.request_quit(),
             _ => (), // Do nothing
         }
         Ok(())
     }
 
-    fn key_up_event(
-        &mut self,
-        _ctx: &mut Context,
-        keycode: KeyCode,
-        _keymod: KeyMods,
-    ) -> GameResult {
-        match keycode {
-            KeyCode::Up => {
+    fn key_up_event(&mut self, _ctx: &mut Context, input: KeyInput) -> GameResult {
+        match input.keycode {
+            Some(KeyCode::Up) => {
                 self.input.yaxis = 0.0;
             }
-            KeyCode::Left | KeyCode::Right => {
+            Some(KeyCode::Left | KeyCode::Right) => {
                 self.input.xaxis = 0.0;
             }
-            KeyCode::Space => {
+            Some(KeyCode::Space) => {
                 self.input.fire = false;
             }
             _ => (), // Do nothing

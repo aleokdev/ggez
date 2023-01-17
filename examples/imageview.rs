@@ -1,6 +1,7 @@
 use ggez::audio;
 use ggez::audio::SoundSource;
 use ggez::event;
+use ggez::glam::Vec2;
 use ggez::graphics::{self, Color, DrawParam};
 use ggez::timer;
 use ggez::{Context, GameResult};
@@ -25,17 +26,17 @@ impl MainState {
             colors.push(Color::from((r, g, b, 255)));
         }
 
-        let mut last_point = glam::Vec2::new(400.0, 300.0);
+        let mut last_point = Vec2::new(400.0, 300.0);
         let mut mb = graphics::MeshBuilder::new();
         for color in colors {
             let x = (self.rng.rand_i32() % 50) as f32;
             let y = (self.rng.rand_i32() % 50) as f32;
-            let point = glam::Vec2::new(last_point.x + x, last_point.y + y);
+            let point = Vec2::new(last_point.x + x, last_point.y + y);
             mb.line(&[last_point, point], 3.0, color)?;
             last_point = point;
         }
-        let mesh = graphics::Mesh::from_data(&ctx.gfx, mb.build());
-        canvas.draw(&mesh, glam::Vec2::new(0.0, 0.0));
+        let mesh = graphics::Mesh::from_data(ctx, mb.build());
+        canvas.draw(&mesh, Vec2::new(0.0, 0.0));
 
         Ok(())
     }
@@ -43,12 +44,12 @@ impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
         ctx.fs.print_all();
 
-        let image = graphics::Image::from_path(&ctx.fs, &ctx.gfx, "/dragon1.png", true)?;
+        let image = graphics::Image::from_path(ctx, "/dragon1.png")?;
 
-        let mut sound = audio::Source::new(&ctx.fs, &ctx.audio, "/sound.ogg")?;
+        let mut sound = audio::Source::new(ctx, "/sound.ogg")?;
 
         // "detached" sounds keep playing even after they are dropped
-        let _ = sound.play_detached(&ctx.audio);
+        let _ = sound.play_detached(ctx);
 
         let rng = oorandom::Rand32::new(271828);
 
@@ -80,31 +81,31 @@ impl event::EventHandler<ggez::GameError> for MainState {
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         let c = self.a as u8;
-        let mut canvas = graphics::Canvas::from_frame(&ctx.gfx, Color::from([0.1, 0.2, 0.3, 1.0]));
+        let mut canvas = graphics::Canvas::from_frame(ctx, Color::from([0.1, 0.2, 0.3, 1.0]));
 
         let color = Color::from((c, c, c, 255));
-        let dest_point = glam::Vec2::new(0.0, 0.0);
+        let dest_point = Vec2::new(0.0, 0.0);
         canvas.draw(&self.image, DrawParam::new().dest(dest_point).color(color));
         canvas.draw(
             graphics::Text::new("Hello, world!").set_scale(48.),
             graphics::DrawParam::from(dest_point).color(color),
         );
 
-        let dest_point2 = glam::Vec2::new(0.0, 256.0);
+        let dest_point2 = Vec2::new(0.0, 256.0);
         let rectangle = graphics::Mesh::new_rectangle(
-            &ctx.gfx,
+            ctx,
             graphics::DrawMode::fill(),
             graphics::Rect::new(0.0, 256.0, 500.0, 32.0),
             Color::from((0, 0, 0, 255)),
         )?;
-        canvas.draw(&rectangle, glam::Vec2::new(0.0, 0.0));
+        canvas.draw(&rectangle, Vec2::new(0.0, 0.0));
         canvas.draw(
             graphics::Text::new("This text is 32 pixels high").set_scale(32.),
             graphics::DrawParam::from(dest_point2).color(Color::WHITE),
         );
 
         self.draw_crazy_lines(ctx, &mut canvas)?;
-        canvas.finish(&mut ctx.gfx)?;
+        canvas.finish(ctx)?;
 
         timer::yield_now();
         Ok(())

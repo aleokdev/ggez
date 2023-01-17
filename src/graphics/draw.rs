@@ -1,4 +1,5 @@
 use super::{Canvas, Color, GraphicsContext, LinearColor, Rect};
+use crate::context::Has;
 
 /// A struct that represents where to put a drawable object.
 ///
@@ -15,6 +16,11 @@ pub enum Transform {
         /// The x/y scale factors expressed as a `Vector2`.
         scale: mint::Vector2<f32>,
         /// An offset, which is applied before scaling and rotation happen.
+        ///
+        /// For most objects this works as a relative offset (meaning `[0.5,0.5]` is an offset which
+        /// centers the object on the destination). These objects are:
+        /// * `Image`, `Canvas`, `Text` and the sprites inside an `InstanceArray` (as long as you're
+        /// not making an instanced mesh-draw)
         offset: mint::Point2<f32>,
     },
     /// Transform made of an arbitrary matrix.
@@ -39,11 +45,13 @@ impl Default for Transform {
 
 impl Transform {
     /// Crunches the transform down to a single matrix, if it's not one already.
+    #[must_use]
     pub fn to_matrix(self) -> Self {
         Transform::Matrix(self.to_bare_matrix())
     }
 
     /// Same as `to_matrix()` but just returns a bare `mint` matrix.
+    #[must_use]
     pub fn to_bare_matrix(self) -> mint::ColumnMatrix4<f32> {
         match self {
             Transform::Matrix(m) => m,
@@ -110,7 +118,7 @@ pub type ZIndex = i32;
 /// # use ggez::graphics::*;
 /// # fn t(canvas: &mut Canvas, image: Image) {
 /// let my_dest = glam::vec2(13.0, 37.0);
-/// canvas.draw(Some(image), DrawParam::default().dest(my_dest));
+/// canvas.draw(&image, DrawParam::default().dest(my_dest));
 /// # }
 /// ```
 ///
@@ -118,14 +126,12 @@ pub type ZIndex = i32;
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct DrawParam {
     /// A portion of the drawable to clip, as a fraction of the whole image.
-    /// Defaults to the whole image `(0,0 to 1,1)` if omitted.
+    /// Defaults to the whole image (\[0.0, 0.0\] to \[1.0, 1.0\]) if omitted.
     pub src: Rect,
     /// Default: white.
     pub color: Color,
     /// Where to put the object.
     pub transform: Transform,
-    /// Whether the scale should be relative to image size.
-    pub image_scale: bool,
     /// The Z coordinate of the draw.
     pub z: ZIndex,
 }
@@ -136,39 +142,51 @@ impl Default for DrawParam {
             src: Rect::one(),
             color: Color::WHITE,
             transform: Transform::default(),
-            image_scale: true,
             z: 0,
         }
     }
 }
 
 impl DrawParam {
-    /// Create a new DrawParam with default values.
+    /// Create a new `DrawParam` with default values.
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set the source rect.
+    #[must_use]
     pub fn src(mut self, src: Rect) -> Self {
         self.src = src;
         self
     }
 
-    /// Set the dest point.
-    pub fn dest<P>(mut self, dest_: P) -> Self
-    where
-        P: Into<mint::Point2<f32>>,
-    {
-        if let Transform::Values { ref mut dest, .. } = self.transform {
-            let p: mint::Point2<f32> = dest_.into();
-            *dest = p;
-            self
+    pub(crate) fn get_dest_mut(&mut self) -> &mut mint::Point2<f32> {
+        if let Transform::Values { dest, .. } = &mut self.transform {
+            dest
         } else {
-            panic!("Cannot set values for a DrawParam matrix")
+            panic!("Cannot calculate destination value for a DrawParam matrix")
         }
     }
 
+    /// Set the dest point.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `Transform` is of the `Matrix` variant.
+    pub fn dest<P>(mut self, dest: P) -> Self
+    where
+        P: Into<mint::Point2<f32>>,
+    {
+        *self.get_dest_mut() = dest.into();
+        self
+    }
+
     /// Set the `dest` and `scale` together.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `Transform` is of the `Matrix` variant.
+    #[must_use]
     pub fn dest_rect(self, rect: Rect) -> Self {
         self.dest(rect.point()).scale(rect.size())
     }
@@ -181,6 +199,11 @@ impl DrawParam {
     }
 
     /// Set the rotation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `Transform` is of the `Matrix` variant.
+    #[must_use]
     pub fn rotation(mut self, rot: f32) -> Self {
         if let Transform::Values {
             ref mut rotation, ..
@@ -194,6 +217,10 @@ impl DrawParam {
     }
 
     /// Set the scaling factors.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `Transform` is of the `Matrix` variant.
     pub fn scale<V>(mut self, scale_: V) -> Self
     where
         V: Into<mint::Vector2<f32>>,
@@ -208,6 +235,10 @@ impl DrawParam {
     }
 
     /// Set the transformation offset.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `Transform` is of the `Matrix` variant.
     pub fn offset<P>(mut self, offset_: P) -> Self
     where
         P: Into<mint::Point2<f32>>,
@@ -230,12 +261,6 @@ impl DrawParam {
         self
     }
 
-    /// Set the image scale option.
-    pub fn image_scale(mut self, image_scale: bool) -> Self {
-        self.image_scale = image_scale;
-        self
-    }
-
     /// Set the Z coordinate.
     pub fn z(mut self, z: ZIndex) -> Self {
         self.z = z;
@@ -250,7 +275,7 @@ impl DrawParam {
 /// # use ggez::graphics::*;
 /// # fn t(canvas: &mut Canvas, image: Image) {
 /// let my_dest = glam::vec2(13.0, 37.0);
-/// canvas.draw(Some(image), my_dest);
+/// canvas.draw(&image, my_dest);
 /// # }
 /// ```
 impl<P> From<P> for DrawParam
@@ -265,28 +290,33 @@ where
 /// All types that can be drawn onto a canvas implement the `Drawable` trait.
 pub trait Drawable {
     /// Draws the drawable onto the canvas.
-    fn draw(&self, canvas: &mut Canvas, param: DrawParam);
+    fn draw(&self, canvas: &mut Canvas, param: impl Into<DrawParam>);
 
     /// Returns a bounding box in the form of a `Rect`.
     ///
     /// It returns `Option` because some `Drawable`s may have no bounding box,
     /// namely `InstanceArray` (as there is no true bounds for the instances given the instanced mesh can differ).
-    fn dimensions(&self, gfx: &mut GraphicsContext) -> Option<Rect>;
+    fn dimensions(&self, gfx: &impl Has<GraphicsContext>) -> Option<Rect>;
 }
 
-#[derive(Debug, crevice::std140::AsStd140)]
+#[derive(Debug, Copy, Clone, crevice::std140::AsStd140)]
 pub(crate) struct DrawUniforms {
     pub color: mint::Vector4<f32>,
     pub src_rect: mint::Vector4<f32>,
     pub transform: mint::ColumnMatrix4<f32>,
 }
 
+#[allow(unsafe_code)]
+unsafe impl bytemuck::Zeroable for DrawUniforms {}
+#[allow(unsafe_code)]
+unsafe impl bytemuck::Pod for DrawUniforms {}
+
 impl DrawUniforms {
-    pub fn from_param(param: &DrawParam, image_scale: mint::Vector2<f32>) -> Self {
-        let (scale_x, scale_y) = if !param.image_scale {
-            (1., 1.)
+    pub fn from_param(param: &DrawParam, image_scale: Option<mint::Vector2<f32>>) -> Self {
+        let (scale_x, scale_y) = if let Some(image_scale) = image_scale {
+            (image_scale.x * param.src.w, image_scale.y * param.src.h)
         } else {
-            (image_scale.x, image_scale.y)
+            (1., 1.)
         };
 
         let param = match param.transform {

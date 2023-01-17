@@ -4,11 +4,11 @@
 //! the underlying `gfx-rs` data types, so you can bypass ggez's
 //! drawing code entirely and write your own.
 
-use crevice::std140::Std140;
+use crevice::std140::AsStd140;
+use ggez::event;
+use ggez::glam::*;
 use ggez::graphics;
-use ggez::{event, graphics::AsStd140};
 use ggez::{Context, GameResult};
-use glam::*;
 use std::env;
 use std::f32;
 use std::path;
@@ -18,7 +18,8 @@ type Isometry3 = Mat4;
 type Point3 = Vec3;
 type Vector3 = Vec3;
 
-#[allow(dead_code)]
+#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
+#[repr(C)]
 struct Vertex {
     pos: [f32; 4],
     tex_coord: [f32; 2],
@@ -62,13 +63,13 @@ struct MainState {
 }
 
 impl MainState {
-    fn new(ctx: &mut Context) -> GameResult<Self> {
+    fn new(ctx: &mut Context) -> Self {
         // Shaders.
         let shader = ctx
             .gfx
             .wgpu()
             .device
-            .create_shader_module(&wgpu::include_wgsl!("../resources/cube.wgsl"));
+            .create_shader_module(wgpu::include_wgsl!("../resources/cube.wgsl"));
 
         // Cube geometry
         let vertex_data = [
@@ -121,12 +122,7 @@ impl MainState {
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: None,
-                contents: unsafe {
-                    std::slice::from_raw_parts(
-                        vertex_data.as_ptr() as *const u8,
-                        vertex_data.len() * std::mem::size_of::<Vertex>(),
-                    )
-                },
+                contents: bytemuck::cast_slice(vertex_data.as_slice()),
                 usage: wgpu::BufferUsages::VERTEX,
             });
         let inds = ctx
@@ -135,12 +131,7 @@ impl MainState {
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: None,
-                contents: unsafe {
-                    std::slice::from_raw_parts(
-                        index_data.as_ptr() as *const u8,
-                        index_data.len() * 4,
-                    )
-                },
+                contents: bytemuck::cast_slice(index_data),
                 usage: wgpu::BufferUsages::INDEX,
             });
 
@@ -197,24 +188,24 @@ impl MainState {
                     fragment: Some(wgpu::FragmentState {
                         module: &shader,
                         entry_point: "fs_main",
-                        targets: &[wgpu::ColorTargetState {
+                        targets: &[Some(wgpu::ColorTargetState {
                             format: ctx.gfx.surface_format(),
                             blend: None,
                             write_mask: wgpu::ColorWrites::ALL,
-                        }],
+                        })],
                     }),
                     multiview: None,
                 });
 
         // Create 1-pixel blue texture.
         let image =
-            graphics::Image::from_solid(&ctx.gfx, 1, graphics::Color::from_rgb(0x20, 0xA0, 0xC0));
+            graphics::Image::from_solid(ctx, 1, graphics::Color::from_rgb(0x20, 0xA0, 0xC0));
 
         let sampler = ctx
             .gfx
             .wgpu()
             .device
-            .create_sampler(&graphics::Sampler::linear_clamp().into());
+            .create_sampler(&graphics::Sampler::default().into());
 
         let locals = ctx
             .gfx
@@ -254,14 +245,13 @@ impl MainState {
                 ],
             });
 
-        let depth =
-            graphics::ScreenImage::new(&ctx.gfx, graphics::ImageFormat::Depth32Float, 1., 1., 1);
+        let depth = graphics::ScreenImage::new(ctx, graphics::ImageFormat::Depth32Float, 1., 1., 1);
 
         // FOV, spect ratio, znear, zfar
         let proj = Mat4::perspective_rh(f32::consts::PI / 4.0, 4.0 / 3.0, 1.0, 10.0);
         let transform = proj * default_view();
 
-        Ok(MainState {
+        MainState {
             frames: 0,
             transform: transform.into(),
             rotation: 0.0,
@@ -272,7 +262,7 @@ impl MainState {
             locals,
             bind_group,
             depth,
-        })
+        }
     }
 }
 
@@ -293,13 +283,13 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 .queue
                 .write_buffer(&self.locals, 0, locals.as_std140().as_bytes());
 
-            let depth = self.depth.image(&ctx.gfx);
+            let depth = self.depth.image(ctx);
 
             let frame = ctx.gfx.frame().clone();
             let cmd = ctx.gfx.commands().unwrap();
             let mut pass = cmd.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,
-                color_attachments: &[wgpu::RenderPassColorAttachment {
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: frame.wgpu().1,
                     resolve_target: None,
                     ops: wgpu::Operations {
@@ -309,7 +299,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                         ),
                         store: true,
                     },
-                }],
+                })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: depth.wgpu().1,
                     depth_ops: Some(wgpu::Operations {
@@ -327,7 +317,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
             pass.draw_indexed(0..36, 0, 0..1);
         }
 
-        let mut canvas = graphics::Canvas::from_frame(&ctx.gfx, None);
+        let mut canvas = graphics::Canvas::from_frame(ctx, None);
 
         // Do ggez drawing
         let dest_point1 = Vec2::new(10.0, 210.0);
@@ -341,7 +331,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
             dest_point2,
         );
 
-        canvas.finish(&mut ctx.gfx)?;
+        canvas.finish(ctx)?;
 
         self.frames += 1;
         if (self.frames % 10) == 0 {
@@ -364,6 +354,6 @@ pub fn main() -> GameResult {
     let cb = ggez::ContextBuilder::new("cube", "ggez").add_resource_path(resource_dir);
 
     let (mut ctx, events_loop) = cb.build()?;
-    let state = MainState::new(&mut ctx)?;
+    let state = MainState::new(&mut ctx);
     event::run(ctx, events_loop, state)
 }

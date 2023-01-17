@@ -1,16 +1,18 @@
 //! Error types and conversion functions.
 use std::error::Error;
 use std::fmt;
+use std::string::FromUtf8Error;
 use std::sync::Arc;
 
 /// An enum containing all kinds of game framework errors.
 #[derive(Debug)]
 pub enum GameError {
-    /// An error in the config file
-    ConfigError(String),
-
+    /// An error when intializing the graphics system.
+    GraphicsInitializationError,
     /// An error in the filesystem layout
     FilesystemError(String),
+    /// An error in the config file
+    ConfigError(String),
 
     /// Something went wrong trying to read from a file
     #[allow(clippy::upper_case_acronyms)]
@@ -47,7 +49,8 @@ pub enum GameError {
 
     /// Something went wrong trying to load a font
     FontError(glyph_brush::ab_glyph::InvalidFont),
-
+    /// Shader encoding error (not valid utf-8)
+    ShaderEncodingError(FromUtf8Error),
     /// Something went wrong applying video settings.
     VideoError(String),
 
@@ -56,17 +59,16 @@ pub enum GameError {
 
     /// Something went wrong in the renderer
     RenderError(String),
+    /// Something went wrong with the `lyon` shape-tesselation library.
+    LyonError(String),
+    /// Something went wrong when drawing text.
+    GlyphBrushError(glyph_brush::BrushError),
     /// Something went wrong when asynchronously mapping a GPU buffer.
     BufferAsyncError(wgpu::BufferAsyncError),
     /// Something went wrong while tessellating a shape.
     TessellationError(lyon::lyon_tessellation::TessellationError),
     /// Something went wrong while building geometry.
     GeometryBuilderError(lyon::lyon_tessellation::GeometryBuilderError),
-    /// Something went wrong when drawing text.
-    GlyphBrushError(glyph_brush::BrushError),
-
-    /// Something went wrong when spawning a task with `futures`.
-    SpawnError(futures::task::SpawnError),
 
     /// Deadlock when trying to lock a mutex.
     LockError,
@@ -85,9 +87,6 @@ impl fmt::Display for GameError {
             GameError::WindowError(e) => write!(f, "Window creation error: {}", e),
             GameError::RequestDeviceError(e) => {
                 write!(f, "Failed to request logical device: {}", e)
-            }
-            GameError::SpawnError(e) => {
-                write!(f, "Failed to spawn a task with `futures`: {}", e)
             }
             GameError::GlyphBrushError(e) => write!(f, "Text rendering error: {}", e),
             GameError::FontSelectError { font } => write!(f, "No such font '{}'", font),
@@ -114,7 +113,6 @@ impl Error for GameError {
             GameError::WindowCreationError(e) => Some(&**e),
             GameError::IOError(e) => Some(&**e),
             GameError::FontError(e) => Some(e),
-            GameError::SpawnError(e) => Some(e),
             GameError::GlyphBrushError(e) => Some(e),
             GameError::BufferAsyncError(e) => Some(e),
             _ => None,
@@ -226,12 +224,6 @@ impl From<Arc<std::io::Error>> for GameError {
 impl From<glyph_brush::ab_glyph::InvalidFont> for GameError {
     fn from(s: glyph_brush::ab_glyph::InvalidFont) -> GameError {
         GameError::FontError(s)
-    }
-}
-
-impl From<futures::task::SpawnError> for GameError {
-    fn from(s: futures::task::SpawnError) -> GameError {
-        GameError::SpawnError(s)
     }
 }
 

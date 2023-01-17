@@ -1,16 +1,18 @@
 /// Based on the bunnymark example from [`tetra`](https://crates.io/crates/tetra)
-/// which is based on https://github.com/openfl/openfl-samples/tree/master/demos/BunnyMark
+/// which is based on <https://github.com/openfl/openfl-samples/tree/master/demos/BunnyMark>
 /// Original BunnyMark (and sprite) by Iain Lobb
 use std::env;
 use std::path;
 
+use ggez::input::keyboard;
 use oorandom::Rand32;
 
 use ggez::graphics::{Color, Image, InstanceArray};
 use ggez::Context;
 use ggez::*;
 
-use glam::*;
+use ggez::glam::*;
+use ggez::input::keyboard::KeyInput;
 
 // NOTE: Using a high number here yields worse performance than adding more bunnies over
 // time - I think this is due to all of the RNG being run on the same tick...
@@ -52,7 +54,7 @@ impl GameState {
     fn new(ctx: &mut Context) -> ggez::GameResult<GameState> {
         // We just use the same RNG seed every time.
         let mut rng = Rand32::new(12345);
-        let texture = Image::from_path(&ctx.fs, &ctx.gfx, "/wabbit_alpha.png", true)?;
+        let texture = Image::from_path(ctx, "/wabbit_alpha.png")?;
         let mut bunnies = Vec::with_capacity(INITIAL_BUNNIES);
         let max_x = (WIDTH - texture.width() as u16) as f32;
         let max_y = (HEIGHT - texture.height() as u16) as f32;
@@ -61,8 +63,8 @@ impl GameState {
             bunnies.push(Bunny::new(&mut rng));
         }
 
-        let bunnybatch =
-            InstanceArray::new(&ctx.gfx, texture.clone(), INITIAL_BUNNIES as u32, false);
+        let mut bunnybatch = InstanceArray::new(ctx, texture.clone());
+        bunnybatch.resize(ctx, INITIAL_BUNNIES);
 
         Ok(GameState {
             rng,
@@ -114,7 +116,7 @@ impl event::EventHandler<ggez::GameError> for GameState {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        let mut canvas = graphics::Canvas::from_frame(&ctx.gfx, Color::from((0.392, 0.584, 0.929)));
+        let mut canvas = graphics::Canvas::from_frame(ctx, Color::from((0.392, 0.584, 0.929)));
 
         if self.batched_drawing {
             self.bunnybatch.set(
@@ -140,19 +142,13 @@ impl event::EventHandler<ggez::GameError> for GameState {
             self.batched_drawing
         ));
 
-        canvas.finish(&mut ctx.gfx)?;
+        canvas.finish(ctx)?;
 
         Ok(())
     }
 
-    fn key_down_event(
-        &mut self,
-        _ctx: &mut Context,
-        keycode: event::KeyCode,
-        _keymods: event::KeyMods,
-        _repeat: bool,
-    ) -> GameResult {
-        if keycode == event::KeyCode::Space {
+    fn key_down_event(&mut self, _ctx: &mut Context, input: KeyInput, _repeat: bool) -> GameResult {
+        if input.keycode == Some(keyboard::KeyCode::Space) {
             self.batched_drawing = !self.batched_drawing;
         }
         Ok(())

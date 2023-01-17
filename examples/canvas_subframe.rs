@@ -9,8 +9,8 @@ use std::env;
 use std::f32::consts::TAU;
 use std::path;
 
-type Point2 = glam::Vec2;
-type Vector2 = glam::Vec2;
+type Point2 = ggez::glam::Vec2;
+type Vector2 = ggez::glam::Vec2;
 
 struct MainState {
     instances: graphics::InstanceArray,
@@ -20,19 +20,19 @@ struct MainState {
 }
 
 impl MainState {
-    fn new(ctx: &mut Context) -> GameResult<MainState> {
-        let image = graphics::Image::from_path(&ctx.fs, &ctx.gfx, "/tile.png", true).unwrap();
-        let instances = graphics::InstanceArray::new(&ctx.gfx, image, 150 * 150, false);
-        let canvas_image = graphics::ScreenImage::new(&ctx.gfx, None, 1., 1., 1);
+    fn new(ctx: &mut Context) -> MainState {
+        let image = graphics::Image::from_path(ctx, "/tile.png").unwrap();
+        let mut instances = graphics::InstanceArray::new(ctx, image);
+        instances.resize(ctx, 150 * 150);
+        let canvas_image = graphics::ScreenImage::new(ctx, None, 1., 1., 1);
         let draw_pt = Point2::new(0.0, 0.0);
         let draw_vec = Vector2::new(1.0, 1.0);
-        let s = MainState {
+        MainState {
             instances,
             canvas_image,
             draw_pt,
             draw_vec,
-        };
-        Ok(s)
+        }
     }
 }
 
@@ -58,7 +58,7 @@ impl MainState {
         }));
 
         let mut canvas =
-            graphics::Canvas::from_screen_image(&ctx.gfx, &mut self.canvas_image, Color::WHITE);
+            graphics::Canvas::from_screen_image(ctx, &mut self.canvas_image, Color::WHITE);
 
         let param = graphics::DrawParam::new()
             .dest(Point2::new(
@@ -73,7 +73,7 @@ impl MainState {
             .offset(Point2::new(750., 750.));
 
         canvas.draw(&self.instances, param);
-        canvas.finish(&mut ctx.gfx)?;
+        canvas.finish(ctx)?;
 
         Ok(())
     }
@@ -88,10 +88,10 @@ impl event::EventHandler<ggez::GameError> for MainState {
 
         // Bounce the rect if necessary
         let (w, h) = ctx.gfx.drawable_size();
-        if self.draw_pt.x + (w as f32 / 2.0) > (w as f32) || self.draw_pt.x < 0.0 {
+        if self.draw_pt.x + w / 2.0 > w || self.draw_pt.x < 0.0 {
             self.draw_vec.x *= -1.0;
         }
-        if self.draw_pt.y + (h as f32 / 2.0) > (h as f32) || self.draw_pt.y < 0.0 {
+        if self.draw_pt.y + h / 2.0 > h || self.draw_pt.y < 0.0 {
             self.draw_vec.y *= -1.0;
         }
         self.draw_pt += self.draw_vec;
@@ -101,8 +101,8 @@ impl event::EventHandler<ggez::GameError> for MainState {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         self.draw_spritebatch(ctx)?;
 
-        let canvas_image = self.canvas_image.image(&ctx.gfx);
-        let mut canvas = graphics::Canvas::from_frame(&ctx.gfx, Color::from([0.1, 0.2, 0.3, 1.0]));
+        let canvas_image = self.canvas_image.image(ctx);
+        let mut canvas = graphics::Canvas::from_frame(ctx, Color::from([0.1, 0.2, 0.3, 1.0]));
 
         let src_x = self.draw_pt.x / canvas_image.width() as f32;
         let src_y = self.draw_pt.y / canvas_image.height() as f32;
@@ -111,11 +111,10 @@ impl event::EventHandler<ggez::GameError> for MainState {
             &canvas_image,
             graphics::DrawParam::new()
                 .dest(self.draw_pt)
-                .src(graphics::Rect::new(src_x, src_y, 0.5, 0.5))
-                .scale([0.5, 0.5]),
+                .src(graphics::Rect::new(src_x, src_y, 0.5, 0.5)),
         );
 
-        canvas.finish(&mut ctx.gfx)?;
+        canvas.finish(ctx)?;
 
         Ok(())
     }
@@ -139,6 +138,6 @@ pub fn main() -> GameResult {
     let cb = ggez::ContextBuilder::new("canvas_subframe", "ggez").add_resource_path(resource_dir);
 
     let (mut ctx, events_loop) = cb.build()?;
-    let state = MainState::new(&mut ctx)?;
+    let state = MainState::new(&mut ctx);
     event::run(ctx, events_loop, state)
 }

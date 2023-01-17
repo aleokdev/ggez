@@ -12,6 +12,7 @@
 use ggez::event;
 use ggez::event::winit_event::{Event, KeyboardInput, WindowEvent};
 use ggez::graphics::{self, Color, DrawMode};
+use ggez::input::keyboard;
 use ggez::GameResult;
 use winit::event_loop::ControlFlow;
 
@@ -23,6 +24,11 @@ pub fn main() -> GameResult {
 
     // Handle events. Refer to `winit` docs for more information.
     events_loop.run(move |mut event, _window_target, control_flow| {
+        let ctx = &mut ctx;
+
+        if ctx.quit_requested {
+            ctx.continuing = false;
+        }
         if !ctx.continuing {
             *control_flow = ControlFlow::Exit;
             return;
@@ -30,14 +36,12 @@ pub fn main() -> GameResult {
 
         *control_flow = ControlFlow::Poll;
 
-        let ctx = &mut ctx;
-
         // This tells `ggez` to update it's internal states, should the event require that.
         // These include cursor position, view updating on resize, etc.
         event::process_event(ctx, &mut event);
         match event {
             Event::WindowEvent { event, .. } => match event {
-                WindowEvent::CloseRequested => event::quit(ctx),
+                WindowEvent::CloseRequested => ctx.request_quit(),
                 WindowEvent::KeyboardInput {
                     input:
                         KeyboardInput {
@@ -46,8 +50,8 @@ pub fn main() -> GameResult {
                         },
                     ..
                 } => {
-                    if let event::KeyCode::Escape = keycode {
-                        *control_flow = winit::event_loop::ControlFlow::Exit
+                    if let keyboard::KeyCode::Escape = keycode {
+                        ctx.request_quit();
                     }
                 }
                 // `CloseRequested` and `KeyboardInput` events won't appear here.
@@ -64,23 +68,21 @@ pub fn main() -> GameResult {
                 // Draw
                 ctx.gfx.begin_frame().unwrap();
 
-                let mut canvas = graphics::Canvas::from_frame(
-                    &ctx.gfx,
-                    graphics::Color::from([0.1, 0.2, 0.3, 1.0]),
-                );
+                let mut canvas =
+                    graphics::Canvas::from_frame(ctx, graphics::Color::from([0.1, 0.2, 0.3, 1.0]));
 
                 let circle = graphics::Mesh::new_circle(
-                    &ctx.gfx,
+                    ctx,
                     DrawMode::fill(),
-                    glam::Vec2::new(0.0, 0.0),
+                    ggez::glam::Vec2::new(0.0, 0.0),
                     100.0,
                     2.0,
                     Color::WHITE,
                 )
                 .unwrap();
-                canvas.draw(&circle, glam::Vec2::new(position, 380.0));
+                canvas.draw(&circle, ggez::glam::Vec2::new(position, 380.0));
 
-                canvas.finish(&mut ctx.gfx).unwrap();
+                canvas.finish(ctx).unwrap();
                 ctx.gfx.end_frame().unwrap();
 
                 // reset the mouse delta for the next frame

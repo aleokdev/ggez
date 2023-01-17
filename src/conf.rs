@@ -15,10 +15,12 @@
 use std::convert::TryFrom;
 use std::io;
 
+use winit::dpi::PhysicalSize;
+
 use crate::error::{GameError, GameResult};
 
 /// Possible fullscreen modes.
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub enum FullscreenType {
     /// Windowed mode.
     Windowed,
@@ -46,17 +48,21 @@ pub enum FullscreenType {
 ///     maximized: false,
 ///     fullscreen_type: FullscreenType::Windowed,
 ///     borderless: false,
-///     min_width: 0.0,
+///     min_width: 1.0,
 ///     max_width: 0.0,
-///     min_height: 0.0,
+///     min_height: 1.0,
 ///     max_height: 0.0,
 ///     resizable: false,
 ///     visible: true,
+///     transparent: false,
 ///     resize_on_scale_factor_change: false,
+///     logical_size: None,
 /// }
 /// # , WindowMode::default());}
 /// ```
-#[derive(Debug, Copy, Clone, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(
+    Debug, Copy, Clone, smart_default::SmartDefault, serde::Serialize, serde::Deserialize, PartialEq,
+)]
 pub struct WindowMode {
     /// Window width in physical pixels
     #[default = 800.0]
@@ -73,6 +79,9 @@ pub struct WindowMode {
     /// Whether or not to show window decorations
     #[default = false]
     pub borderless: bool,
+    /// Whether or not the window should be transparent
+    #[default = false]
+    pub transparent: bool,
     /// Minimum width for resizable windows; 1 is the technical minimum,
     /// as wgpu will panic on a width of 0.
     #[default = 1.0]
@@ -104,6 +113,10 @@ pub struct WindowMode {
     /// For more context on this take a look at [this conversation](https://github.com/ggez/ggez/pull/949#issuecomment-854731226).
     #[default = false]
     pub resize_on_scale_factor_change: bool,
+    // logical_size is serialized as a table, so it must be at the end of the struct for toml
+    /// Window height/width but allows LogicalSize for high DPI systems. If Some will be used instead of width/height.
+    #[default(None)]
+    pub logical_size: Option<winit::dpi::LogicalSize<f32>>,
 }
 
 impl WindowMode {
@@ -137,6 +150,13 @@ impl WindowMode {
     #[must_use]
     pub fn borderless(mut self, borderless: bool) -> Self {
         self.borderless = borderless;
+        self
+    }
+
+    /// Set whether a window should be transparent.
+    #[must_use]
+    pub fn transparent(mut self, transparent: bool) -> Self {
+        self.transparent = transparent;
         self
     }
 
@@ -181,6 +201,25 @@ impl WindowMode {
         self.resize_on_scale_factor_change = resize_on_scale_factor_change;
         self
     }
+
+    // Use logical_size if set, else convert width/height to PhysicalSize
+    pub(crate) fn actual_size(&self) -> GameResult<winit::dpi::Size> {
+        let actual_size: winit::dpi::Size = if let Some(logical_size) = self.logical_size {
+            logical_size.into()
+        } else {
+            winit::dpi::PhysicalSize::<f64>::from((self.width, self.height)).into()
+        };
+
+        let physical_size: PhysicalSize<f64> = actual_size.to_physical(1.0);
+        if physical_size.width >= 1.0 && physical_size.height >= 1.0 {
+            Ok(actual_size)
+        } else {
+            Err(GameError::WindowError(format!(
+                "window width and height need to be at least 1; actual values: {}, {}",
+                physical_size.width, physical_size.height
+            )))
+        }
+    }
 }
 
 /// A builder structure containing window settings
@@ -200,7 +239,9 @@ impl WindowMode {
 /// }
 /// # , WindowSetup::default()); }
 /// ```
-#[derive(Debug, Clone, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(
+    Debug, Clone, smart_default::SmartDefault, serde::Serialize, serde::Deserialize, PartialEq, Eq,
+)]
 pub struct WindowSetup {
     /// The window title.
     #[default(String::from("An easy, good game"))]
@@ -251,7 +292,7 @@ impl WindowSetup {
         self
     }
 
-    /// Set sRGB color mode.
+    /// Set `sRGB` color mode.
     #[must_use]
     pub fn srgb(mut self, active: bool) -> Self {
         self.srgb = active;
@@ -261,18 +302,27 @@ impl WindowSetup {
 
 /// Possible graphics backends.
 /// The default is `Primary`.
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, SmartDefault)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    serde::Serialize,
+    serde::Deserialize,
+    PartialEq,
+    Eq,
+    smart_default::SmartDefault,
+)]
 #[serde(tag = "type")]
 pub enum Backend {
-    /// Primary comprises of Vulkan + Metal + DX12 (each as a fallback for the other).
+    /// Includes [`Backend::OnlyPrimary`] and also secondary APIs consisting of OpenGL and DX11.
+    ///
+    /// These APIs may have issues and may be deprecated by some platforms.
+    #[default]
+    All,
+    /// Primary APIs consisting of Vulkan, Metal and DX12.
     ///
     /// These APIs have first-class support from WGPU and from the platforms that support them.
-    #[default]
-    Primary,
-    /// Secondary comprises of OpenGL + DX11 (each as a fallback for the other).
-    ///
-    /// These APIs may have issues and may be deprecated by some platforms. This is not recommended.
-    Secondary,
+    OnlyPrimary,
     /// Use the Khronos Vulkan API.
     Vulkan,
     /// Use the Apple Metal API.
@@ -288,7 +338,7 @@ pub enum Backend {
 }
 
 /// The possible number of samples for multisample anti-aliasing.
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub enum NumSamples {
     /// One sample
     One = 1,
@@ -343,7 +393,9 @@ impl From<NumSamples> for u8 {
 /// }
 /// # , Conf::default()); }
 /// ```
-#[derive(Serialize, Deserialize, Debug, PartialEq, SmartDefault, Clone)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Debug, PartialEq, smart_default::SmartDefault, Clone,
+)]
 pub struct Conf {
     /// Window setting information that can be set at runtime
     pub window_mode: WindowMode,
@@ -401,7 +453,7 @@ mod tests {
     fn headless_encode_round_trip() {
         let c1 = conf::Conf::new();
         let mut writer = Vec::new();
-        let _c = c1.to_toml_file(&mut writer).unwrap();
+        c1.to_toml_file(&mut writer).unwrap();
         let mut reader = writer.as_slice();
         let c2 = conf::Conf::from_toml_file(&mut reader).unwrap();
         assert_eq!(c1, c2);

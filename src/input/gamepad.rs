@@ -10,7 +10,7 @@ use std::fmt;
 
 pub use gilrs::{self, Event, Gamepad, Gilrs};
 
-/// A unique identifier for a particular GamePad
+/// A unique identifier for a particular gamepad
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct GamepadId(pub(crate) gilrs::GamepadId);
 
@@ -81,15 +81,13 @@ impl<'a> Iterator for GamepadsIterator<'a> {
 }
 
 /// Returns the `Gamepad` associated with an `id`.
-// TODO: Add deprecation version
-#[deprecated(note = "Use `ctx.gamepad.gamepad` instead")]
+#[deprecated(since = "0.8.0", note = "Use `ctx.gamepad.gamepad` instead")]
 pub fn gamepad(ctx: &Context, id: GamepadId) -> Gamepad {
     ctx.gamepad.gamepad(id)
 }
 
 /// Return an iterator of all the `Gamepads` that are connected.
-// TODO: Add deprecation version
-#[deprecated(note = "Use `ctx.gamepad.gamepads` instead")]
+#[deprecated(since = "0.8.0", note = "Use `ctx.gamepad.gamepads` instead")]
 pub fn gamepads(ctx: &Context) -> GamepadsIterator {
     ctx.gamepad.gamepads()
 }

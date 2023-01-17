@@ -1,13 +1,12 @@
-use crate::graphics::{FillOptions, StrokeOptions};
+use mint::Point2;
 
-/// A 2 dimensional point representing a location
-pub(crate) type Point2 = glam::Vec2;
+use crate::graphics::{FillOptions, StrokeOptions};
 
 /// A simple 2D rectangle.
 ///
 /// The origin of the rectangle is at the top-left,
 /// with x increasing to the right and y increasing down.
-#[derive(Copy, Clone, PartialEq, Debug, Default, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct Rect {
     /// X coordinate of the left edge of the rect.
     pub x: f32,
@@ -25,7 +24,7 @@ impl Rect {
         Rect { x, y, w, h }
     }
 
-    /// Creates a new `Rect` a la Love2D's `love.graphics.newQuad`,
+    /// Creates a new `Rect` a la `Love2D`'s `love.graphics.newQuad`,
     /// as a fraction of the reference rect's size.
     pub fn fraction(x: f32, y: f32, w: f32, h: f32, reference: &Rect) -> Rect {
         Rect {
@@ -53,7 +52,7 @@ impl Rect {
         Self::new(0.0, 0.0, 0.0, 0.0)
     }
 
-    /// Creates a new `Rect` at `0,0` with width and height 1.
+    /// Creates a new `Rect` at \[0.0, 0.0\] with width and height 1.
     pub const fn one() -> Self {
         Self::new(0.0, 0.0, 1.0, 1.0)
     }
@@ -123,8 +122,8 @@ impl Rect {
     }
 
     /// Checks whether the `Rect` overlaps a circle.
-    pub fn overlaps_circle(&self, point: impl Into<Point2>, radius: f32) -> bool {
-        let point: glam::Vec2 = point.into();
+    pub fn overlaps_circle(&self, point: impl Into<Point2<f32>>, radius: f32) -> bool {
+        let point = glam::Vec2::from(point.into());
         let rect_center: glam::Vec2 = self.center().into();
         let circle_distance = (point - rect_center).abs();
 
@@ -179,10 +178,10 @@ impl Rect {
         let x1 = self.right();
         let y1 = self.bottom();
         let points = [
-            rotation * Point2::new(x0, y0),
-            rotation * Point2::new(x0, y1),
-            rotation * Point2::new(x1, y0),
-            rotation * Point2::new(x1, y1),
+            rotation * glam::Vec2::new(x0, y0),
+            rotation * glam::Vec2::new(x0, y1),
+            rotation * glam::Vec2::new(x1, y0),
+            rotation * glam::Vec2::new(x1, y1),
         ];
         let p0 = points[0];
         let mut x_max = p0.x;
@@ -271,7 +270,7 @@ impl From<Rect> for [f32; 4] {
 /// [`MAGENTA`](`Color::MAGENTA`)
 /// [`YELLOW`](`Color::YELLOW`)
 
-#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Color {
     /// Red component
     pub r: f32,
@@ -485,7 +484,7 @@ impl From<Color> for [f32; 4] {
 
 /// A RGBA color in the *linear* color space,
 /// suitable for shoving into a shader.
-#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub struct LinearColor {
     /// Red component
     pub r: f32,
@@ -546,10 +545,10 @@ impl From<LinearColor> for [f32; 4] {
 impl From<LinearColor> for wgpu::Color {
     fn from(color: LinearColor) -> Self {
         wgpu::Color {
-            r: color.r as f64,
-            g: color.g as f64,
-            b: color.b as f64,
-            a: color.a as f64,
+            r: f64::from(color.r),
+            g: f64::from(color.g),
+            b: f64::from(color.b),
+            a: f64::from(color.a),
         }
     }
 }
@@ -565,12 +564,12 @@ pub enum DrawMode {
 }
 
 impl DrawMode {
-    /// Constructs a DrawMode that draws a stroke with the given width
+    /// Constructs a `DrawMode` that draws a stroke with the given width
     pub fn stroke(width: f32) -> DrawMode {
         DrawMode::Stroke(StrokeOptions::default().with_line_width(width))
     }
 
-    /// Constructs a DrawMode that fills shapes with default fill options.
+    /// Constructs a `DrawMode` that fills shapes with default fill options.
     pub fn fill() -> DrawMode {
         DrawMode::Fill(FillOptions::default())
     }
@@ -627,10 +626,10 @@ mod tests {
     fn headless_test_rect_contains() {
         let r = Rect::new(0.0, 0.0, 128.0, 128.0);
         println!("{} {} {} {}", r.top(), r.bottom(), r.left(), r.right());
-        let p = Point2::new(1.0, 1.0);
+        let p = glam::Vec2::new(1.0, 1.0);
         assert!(r.contains(p));
 
-        let p = Point2::new(500.0, 0.0);
+        let p = glam::Vec2::new(500.0, 0.0);
         assert!(!r.contains(p));
     }
 
@@ -665,7 +664,7 @@ mod tests {
 
         let mut r1 = Rect::new(32.0, 32.0, 64.0, 64.0);
         let r2 = Rect::new(64.0, 64.0, 64.0, 64.0);
-        r1.move_to(Point2::new(64.0, 64.0));
+        r1.move_to(glam::Vec2::new(64.0, 64.0));
         assert!(r1 == r2);
     }
 

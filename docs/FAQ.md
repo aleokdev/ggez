@@ -8,6 +8,8 @@
   * [How do I make a GUI?](#gfx_gui)
   * [Resolution independence (or "Why do things not end up where I want them to be?")](#gfx_resolution)
   * [Relative and absolute offsets with `DrawParam::offset`](#offsets)
+  * [Logical vs Pixel Sized](#logical-vs-pixel)
+  * [Using AsStd140 requires crevice to be included](#crevice-dependency)
 * **[Input](#input)**
   * [Returned mouse coordinates are wrong!](#mouse_coords)
 * **[Libraries](#libraries)**
@@ -25,6 +27,7 @@
 * **[Miscellaneous](#misc)**
   * [How do I load my `conf.toml` file?](#misc_conf)
   * [I get a console window when I launch my executable on Windows](#misc_win_console)
+  * [What is this `Has<GraphicsContext>` parameter?](#has_parameter)
 
 ---
 
@@ -97,7 +100,7 @@ In general, ggez is designed to focus on 2D graphics.  We want it to be possible
 
 ## How do I make a GUI?
 
-There's no single optimal way to do it currently, but as of 2021 there's a few
+There's no single optimal way to do it currently, but as of 2022 there's a few
 GUI libraries that are able to use `ggez` as a drawing backend.
 `raui` seems to offer a `ggez` backend natively, though we have no idea
 how well it works, and `iced` used to have one, but it seems to have
@@ -116,11 +119,11 @@ By default ggez uses a coordinate system corresponding to the window size
 in physical pixels, but you can change that by calling something like
 
 ```rust
-graphics::set_screen_coordinates(&mut context, Rect::new(0.0, 0.0, 1.0, 1.0)).unwrap();
+canvas.set_screen_coordinates(Rect::new(0.0, 0.0, 1.0, 1.0));
 ```
 
 and scaling your `Image`s with `graphics::DrawParam`.
- 
+
 Please note that updating your coordinate system like this may also
 be necessary [when drawing onto canvases of custom sizes](https://github.com/ggez/ggez/blob/aed56921fbca8ac8192b492f0a46d92e4a0a95bb/src/graphics/canvas.rs#L44-L48).
 
@@ -135,10 +138,8 @@ In ggez 0.6.1 `DrawParam::offset` used to be interpreted as a _relative_ offset 
 Then, we wanted to unify this and switch `Mesh` over to a relative interpretation as well, but we discovered, that [this
 relative interpretation can be really problematic for certain `Drawable`s](https://github.com/ggez/ggez/issues/736#issuecomment-945181003), so now the divide is as follows:
 
-+ `Image`, `Canvas` and the sprites inside a `SpriteBatch` use the relative interpretation
-+ `Mesh`, `MeshBatch`, `Spritebatch` (and thereby `Text` too) use the absolute interpretation
-
-This is how offsets worked before ggez 0.6 and it's how they work now, for good reasons.
++ The relative interpretation is used by `Image`, `Canvas`, `Text` and the sprites inside an `InstanceArray` when not making an instanced mesh-draw
++ The absolute interpretation is used by `Mesh` and `InstanceArray`
 
 What this means for you is: If you want `DrawParam::offset` to be a relative offset (i.e. [1,1] means "bottom right", [0.5,0.5] means "centered", etc.) for any of the types mentioned as
 "absolute interpretations" above, then you'll have to adapt your offset like this:
@@ -176,6 +177,48 @@ if let Transform::Values { offset, .. } = param.trans {
 }
 ```
 
+<a name="logical-vs-pixel">
+
+## Logical vs Pixel Sized
+
+The standard window mode configuration requests a window size in absolute pixels:
+
+```
+        conf::WindowMode {
+            width: 800.0,
+            height: 600.0,
+            ..Default::default()
+        }
+```
+
+This can be problematic on high DPI screens where a 800x600 window is very small.
+
+A new logical_size option will scale the requested window to be the same effective size on all screens by requesting a window with more pixels (1.5 or 2 times more for example).
+
+```
+        conf::WindowMode {
+            logical_size: Some(LogicalSize::new(800.0, 600.0)),
+            ..Default::default()
+        }
+```
+
+
+More details can be found [here](https://docs.rs/winit/latest/winit/dpi/index.html).
+
+
+<a name="crevice-dependency">
+
+## Using AsStd140 requires crevice to be included
+
+If you want to create your own structs to send as uniforms to your shaders, similar as we to in the [shader example](https://github.com/ggez/ggez/blob/master/examples/shader.rs),
+then those structs need to implement `AsStd140`, which can luckily be easily derived using crevice.
+
+So far, so good. But now I have to tell you that you also need to **depend on the version of crevice that we are using
+yourself, directly**, which at the time of writing (ggez 0.8.1) is `0.11` currently. So add `crevice = "0.11"` to your Cargo.toml .
+
+There may or may not be ways around this via writing our own wrapper macro using `Span::mixed_site` and re-exporting `crevice`,
+but we lowly mortals haven't yet found a way to actually do this. If you manage to solve this problem, please let us know! :)
+
 <a name="input">
 
 # Input
@@ -196,7 +239,7 @@ When created, a window starts out with a coordinate system perfectly
 corresponding to its physical size in pixels. That's why, initially,
 translating mouse coordinates to logical coordinates is not necessary
 at all. Both systems are just the same.
- 
+
 But once physical and logical coordinates get out of sync problems
 start to arise. If you want more info on how to navigate this issue
 take a look at the [`input_test`](../examples/input_test.rs) and [`graphics_settings`](../examples/graphics_settings.rs) examples.
@@ -228,11 +271,11 @@ provides types for other math libraries to convert to and from with.
 What you are supposed to do is to add a math library of your choice to
 your game such as glam or nalgebra, usually with a "mint" feature.  For
 example. You can add
- 
+
  ```rust
  glam = { version = "0.15.2", features = ["mint"] }
  ```
- 
+
  in your Cargo.toml, then when you try to pass
 something to, say `DrawParam::new().dest(my_point)`, you will
 be able to pass a glam type like
@@ -297,7 +340,11 @@ on how to do that.
 
 ## Drawing a few hundred images or shapes is slow!
 
-Again, debug mode is slow.  Plus, each single draw call has some overhead.  If building in release mode still isn't fast enough, then look into using `SpriteBatch` to draw a bunch of chunks from a spritesheet (also known as an atlas).  If you're drawing geometry, instead of using `graphics::rectangle()` or `graphics::circle()` and such, which create a new `Mesh` on each call and then throw it away, create and store a `Mesh` and draw it many times, or use a `MeshBuilder` to build a single `Mesh` out of many separate shapes.
+Again, debug mode is slow.  Plus, each single draw call has some overhead.  If building in release mode still isn't fast
+enough, then look into using `InstanceArray` to draw a bunch of chunks from a spritesheet (also known as an atlas).
+If you're drawing geometry, instead of using `graphics::rectangle()` or `graphics::circle()` and such, which create a
+new `Mesh` on each call and then throw it away, create and store a `Mesh` and draw it many times, or use a `MeshBuilder`
+to build a single `Mesh` out of many separate shapes.
 
 <a name="platforms">
 
@@ -404,3 +451,13 @@ If you wish, you can also disable it only in release mode:
 ```
 
 [`egui`]: https://github.com/emilk/egui#integrations
+
+<a name="has_parameter">
+
+## What is this `Has` parameter?
+
+You may notice a lot of methods taking a `gfx: &impl Has<GraphicsContext>` parameter, what is up with that?
+
+Since version 0.8, we support split borrowing the sub-contexts. **This is not useful for most users so you may just pass `ctx` to any parameter taking `Has`**. If you want to perform a split-borrow:
+
+You may pass `&ctx.gfx` for `gfx: &impl Has<GraphicsContext>`
