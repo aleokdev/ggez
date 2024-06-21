@@ -91,6 +91,16 @@ impl SoundData {
         Ok(SoundData::from(buffer))
     }
 
+    /// Loads sound data from a given path in the filesystem.
+    #[allow(unused_results)]
+    pub fn from_path(fs: &impl Has<Filesystem>, path: impl AsRef<Path>) -> GameResult<Self> {
+        let fs = fs.retrieve();
+
+        let mut bytes = vec![];
+        fs.open(path)?.read_to_end(&mut bytes)?;
+        Ok(SoundData(Arc::from(&bytes)))
+    }
+
     /// Indicates if the data can be played as a sound.
     pub fn can_play(&self) -> bool {
         let cursor = io::Cursor::new(self.clone());

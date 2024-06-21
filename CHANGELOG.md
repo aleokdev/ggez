@@ -75,6 +75,10 @@ A new event callback exists for this called `raw_mouse_motion_event()`
 
 `Shader::vs_module` and `Shader::fs_module` now exist to get the underlying wgpu shader modules.
 
+### Utils
+
+`SoundData::from_path` was added to load sound data directly from a filesystem, akin to `FontData::from_path` or `Image::from_path`.
+
 ### Examples
 
 General examples:
