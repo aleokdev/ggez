@@ -111,10 +111,12 @@ impl DrawParam3d {
         self
     }
 
-    /// Change the transform of the `DrawParam3d`
-    #[must_use]
-    pub fn transform(mut self, transform: Transform3d) -> Self {
-        self.transform = transform;
+    /// Set the transformation matrix.
+    pub fn transform<M>(mut self, transform: M) -> Self
+    where
+        M: Into<mint::ColumnMatrix4<f32>>,
+    {
+        self.transform = Transform3d::Matrix(transform.into());
         self
     }
 }
@@ -375,7 +377,7 @@ impl DrawUniforms3d {
     pub fn from_param(param: &DrawParam3d) -> Self {
         let param = match param.transform {
             Transform3d::Values { .. } => *param,
-            Transform3d::Matrix(m) => param.transform(Transform3d::Matrix(m)),
+            Transform3d::Matrix(m) => param.transform(m),
         };
 
         let color = LinearColor::from(param.color);
