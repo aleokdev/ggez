@@ -125,7 +125,7 @@ impl event::EventHandler for MainState {
                 C/Space: Up and Down
                 ",
             ),
-            dest_point2,
+            graphics::DrawParam::new().dest(dest_point2),
         );
 
         canvas.finish(ctx)?;

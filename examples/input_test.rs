@@ -54,7 +54,10 @@ impl event::EventHandler for MainState {
             },
             Color::WHITE,
         )?;
-        canvas.draw(&rectangle, Vec2::new(0.0, 0.0));
+        canvas.draw(
+            &rectangle,
+            graphics::DrawParam::new().dest(Vec2::new(0.0, 0.0)),
+        );
         canvas.finish(ctx)?;
         Ok(())
     }

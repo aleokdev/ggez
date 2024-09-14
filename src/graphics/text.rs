@@ -284,7 +284,7 @@ impl Text {
 }
 
 impl Drawable for Text {
-    fn draw(&self, canvas: &mut Canvas, param: impl Into<DrawParam>) {
+    fn draw(&self, canvas: &mut Canvas, param: DrawParam) {
         canvas.push_draw(Draw::BoundedText { text: self.clone() }, param.into());
     }
 }

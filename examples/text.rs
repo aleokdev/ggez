@@ -2,7 +2,7 @@
 
 use ggez::conf::{WindowMode, WindowSetup};
 use ggez::glam::Vec2;
-use ggez::graphics::{self, Color, PxScale, Text, TextAlign, TextFragment};
+use ggez::graphics::{self, Color, DrawParam, PxScale, Text, TextAlign, TextFragment};
 use ggez::timer;
 use ggez::{event, graphics::TextLayout};
 use ggez::{Context, ContextBuilder, GameResult};
@@ -152,7 +152,7 @@ impl event::EventHandler for App {
                 "1_demo_text_4" => (300.0 / 2.0) + 20.0,
                 _ => 20.0,
             };
-            canvas.draw(text, Vec2::new(x, 20.0 + height));
+            canvas.draw(text, DrawParam::new().dest(Vec2::new(x, 20.0 + height)));
             //height += 20.0 + text.height(ctx) as f32;
             height += 20.0 + text.measure(ctx)?.y
         }

@@ -63,7 +63,7 @@ fn draw_coord_labels(canvas: &mut graphics::Canvas) {
         for y in 0..GRID_SIZE {
             let point = Vec2::new(x as f32 * GRID_INTERVAL, y as f32 * GRID_INTERVAL);
             let s = format!("({}, {})", point.x, point.y);
-            canvas.draw(&graphics::Text::new(s), point);
+            canvas.draw(&graphics::Text::new(s), DrawParam::new().dest(point));
         }
     }
 }

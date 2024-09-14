@@ -80,7 +80,7 @@ pub fn main() -> GameResult {
                     Color::WHITE,
                 )
                 .unwrap();
-                canvas.draw(&circle, ggez::glam::Vec2::new(position, 380.0));
+                canvas.draw(&circle, graphics::DrawParam::new().dest(ggez::glam::Vec2::new(position, 380.0)));
 
                 canvas.finish(ctx).unwrap();
                 ctx.gfx.end_frame().unwrap();

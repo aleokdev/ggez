@@ -41,7 +41,7 @@ impl event::EventHandler for MainState {
             graphics::Text::new("Hello, world!")
                 .set_font("LiberationMono")
                 .set_scale(48.),
-            dest_point,
+            graphics::DrawParam::new().dest(dest_point),
         );
 
         canvas.finish(ctx)?;

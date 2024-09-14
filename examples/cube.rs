@@ -327,11 +327,11 @@ impl event::EventHandler for MainState {
         let dest_point2 = Vec2::new(10.0, 250.0);
         canvas.draw(
             &graphics::Text::new("You can mix ggez and wgpu drawing;"),
-            dest_point1,
+            graphics::DrawParam::new().dest(dest_point1),
         );
         canvas.draw(
             &graphics::Text::new("it basically draws wgpu stuff first, then ggez"),
-            dest_point2,
+            graphics::DrawParam::new().dest(dest_point2),
         );
 
         canvas.finish(ctx)?;

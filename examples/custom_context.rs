@@ -109,7 +109,7 @@ impl event::EventHandler<MyContext> for MainState {
         let mut canvas =
             graphics::Canvas::from_frame(ctx, graphics::Color::from([0.1, 0.2, 0.3, 1.0]));
 
-        canvas.draw(&self.circle, Vec2::new(self.pos_x, 380.0));
+        canvas.draw(&self.circle, graphics::DrawParam::new().dest(Vec2::new(self.pos_x, 380.0)));
 
         canvas.finish(ctx)?;
 

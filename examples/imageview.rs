@@ -36,7 +36,7 @@ impl MainState {
             last_point = point;
         }
         let mesh = graphics::Mesh::from_data(ctx, mb.build());
-        canvas.draw(&mesh, Vec2::new(0.0, 0.0));
+        canvas.draw(&mesh, graphics::DrawParam::new().dest(Vec2::new(0.0, 0.0)));
 
         Ok(())
     }
@@ -98,7 +98,7 @@ impl event::EventHandler for MainState {
             graphics::Rect::new(0.0, 256.0, 500.0, 32.0),
             Color::from((0, 0, 0, 255)),
         )?;
-        canvas.draw(&rectangle, Vec2::new(0.0, 0.0));
+        canvas.draw(&rectangle, graphics::DrawParam::new().dest(Vec2::new(0.0, 0.0)));
         canvas.draw(
             graphics::Text::new("This text is 32 pixels high").set_scale(32.),
             graphics::DrawParam::from(dest_point2).color(Color::WHITE),

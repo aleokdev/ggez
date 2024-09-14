@@ -101,7 +101,7 @@ use std::path::Path;
     since = "0.8.0",
     note = "Use `drawable.draw` or `canvas.draw` instead."
 )]
-pub fn draw(canvas: &mut Canvas, drawable: &impl Drawable, param: impl Into<DrawParam>) {
+pub fn draw(canvas: &mut Canvas, drawable: &impl Drawable, param: DrawParam) {
     drawable.draw(canvas, param);
 }
 

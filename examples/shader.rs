@@ -52,7 +52,7 @@ impl event::EventHandler for MainState {
             2.0,
             Color::WHITE,
         )?;
-        canvas.draw(&circle, Vec2::new(0.0, 0.0));
+        canvas.draw(&circle, Default::default());
 
         self.params.set_uniforms(ctx, &self.dim);
         canvas.set_shader(&self.shader);
@@ -65,7 +65,7 @@ impl event::EventHandler for MainState {
             2.0,
             Color::WHITE,
         )?;
-        canvas.draw(&circle, Vec2::new(0.0, 0.0));
+        canvas.draw(&circle, Default::default());
 
         canvas.set_default_shader();
         let circle = graphics::Mesh::new_circle(
@@ -76,7 +76,7 @@ impl event::EventHandler for MainState {
             2.0,
             Color::WHITE,
         )?;
-        canvas.draw(&circle, Vec2::new(0.0, 0.0));
+        canvas.draw(&circle, Default::default());
 
         canvas.finish(ctx)
     }

@@ -289,7 +289,7 @@ impl event::EventHandler for MainState {
 
         // draw the animated ball
         let ball_pos = self.ball_animation.now_strict().unwrap();
-        canvas.draw(&self.ball, ball_pos);
+        canvas.draw(&self.ball, graphics::DrawParam::new().dest(ball_pos));
 
         // draw the player
         let current_frame_src: graphics::Rect = self.player_animation.now_strict().unwrap().into();

@@ -121,7 +121,7 @@ impl event::EventHandler for MainState {
         let dest_point2 = Vec2::new(10.0, 250.0);
         canvas.draw(
             &graphics::Text::new("You can mix 3d and 2d drawing;"),
-            dest_point1,
+            graphics::DrawParam::new().dest(dest_point1),
         );
         canvas.draw(
             &graphics::Text::new(
@@ -131,7 +131,7 @@ impl event::EventHandler for MainState {
                 C/Space: Up and Down
                 ",
             ),
-            dest_point2,
+            graphics::DrawParam::new().dest(dest_point2),
         );
 
         canvas.finish(ctx)?;

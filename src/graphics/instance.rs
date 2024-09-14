@@ -305,7 +305,7 @@ impl InstanceArray {
 }
 
 impl Drawable for InstanceArray {
-    fn draw(&self, canvas: &mut Canvas, param: impl Into<DrawParam>) {
+    fn draw(&self, canvas: &mut Canvas, param: DrawParam) {
         // Only flush (and then push a draw) if there are any instances to draw.
         // This guards against attempts to create empty buffers in `new_wgpu`, see #1168.
         if self.instances().is_empty() {

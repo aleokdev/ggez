@@ -128,7 +128,7 @@ impl event::EventHandler for MainState {
             }
         }
         let mesh = graphics::Mesh::from_data(ctx, mb.build());
-        canvas.draw(&mesh, ggez::mint::Point2 { x: 0.0, y: 0.0 });
+        canvas.draw(&mesh, graphics::DrawParam::new().dest(ggez::mint::Point2 { x: 0.0, y: 0.0 }));
 
         canvas.finish(ctx)?;
 

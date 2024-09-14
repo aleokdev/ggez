@@ -2,6 +2,7 @@ use ggez::audio;
 use ggez::audio::SoundSource;
 use ggez::event;
 use ggez::graphics;
+use ggez::graphics::DrawParam;
 use ggez::input;
 use ggez::{Context, GameResult};
 
@@ -75,7 +76,7 @@ impl event::EventHandler for MainState {
 
         canvas.draw(
             &graphics::Text::new("Press number keys 1-6 to play a sound, or escape to quit."),
-            [100., 100.],
+            DrawParam::new().dest([100., 100.]),
         );
 
         canvas.finish(ctx)

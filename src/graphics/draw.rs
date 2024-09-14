@@ -310,7 +310,7 @@ where
 /// All types that can be drawn onto a canvas implement the `Drawable` trait.
 pub trait Drawable {
     /// Draws the drawable onto the canvas.
-    fn draw(&self, canvas: &mut Canvas, param: impl Into<DrawParam>);
+    fn draw(&self, canvas: &mut Canvas, param: DrawParam);
 }
 
 #[derive(Debug, Copy, Clone, crevice::std140::AsStd140)]

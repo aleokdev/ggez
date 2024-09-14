@@ -254,7 +254,7 @@ impl Mesh {
 }
 
 impl Drawable for Mesh {
-    fn draw(&self, canvas: &mut Canvas, param: impl Into<DrawParam>) {
+    fn draw(&self, canvas: &mut Canvas, param: DrawParam) {
         canvas.push_draw(
             Draw::Mesh {
                 mesh: self.clone(),
@@ -281,7 +281,7 @@ pub struct Quad;
 
 // draw quad
 impl Drawable for Quad {
-    fn draw(&self, canvas: &mut Canvas, param: impl Into<DrawParam>) {
+    fn draw(&self, canvas: &mut Canvas, param: DrawParam) {
         canvas.default_resources().mesh.clone().draw(canvas, param);
     }
 }
